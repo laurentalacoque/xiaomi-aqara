@@ -2,6 +2,11 @@
 # -*- coding: utf-8 -*-
 import json
 import logging
+try:
+    import basestring
+except:
+    pass
+
 log=logging.getLogger(__name__)
 class KnownDevices:
     def __init__(self,known_devices_file = "known_devices.json"):
@@ -20,7 +25,7 @@ class KnownDevices:
             self.known_devices = {}
             log.error("Could not read known_devices from %s : %r"%(self.known_devices_file,e))
             return False
-            
+
     def __save_known_devices(self):
         """Save known devices to file"""
         try:
@@ -31,19 +36,19 @@ class KnownDevices:
         except Exception as e:
             log.error("__save_known_devices: Error: %r", e)
             return False
-        
+
     def get_context(self,data):
         """
         data: a dict containing parsed aqara packet or a string containing sid
-        
+
         returns a dict(room = "Room", name = "Name", model = "Model")
-        
-        if data is a packet and data["sid"] is not known, room, name will be "" 
+
+        if data is a packet and data["sid"] is not known, room, name will be ""
         and the sid will be appended to the json file
-        
+
         if data is a string (sid): the device won't be appended
         """
-        if isinstance(data,str):
+        if isinstance(data,basestring):
             #sid
             return self.known_devices.get(data,dict(name="",room="",model="unknown"))
         #else: must be a packet
@@ -67,7 +72,7 @@ class AqaraDevice:
         self.model    = model
         self.context  = {}
         self.last_packet = None
-        
+
     def update(self,packet):
         """ update the current state of the object """
         try:
@@ -85,7 +90,7 @@ class AqaraDevice:
 
     def __unicode__(self):
         return (u"[%s] (%s/%s)"%(self.model,self.context["room"],self.context["name"]))
-    
+
     def __str__(self):
         return unicode(self).encode("utf-8")
 
@@ -95,11 +100,11 @@ class AqaraSensor(AqaraDevice):
         self.capabilities = {}
         for capability in capabilities:
             self.capabilities[capability] = { "value": None, "callbacks": {}, "timestamp": 0.0}
-        
+
     def register_callback(self,callback,capability, tolerance = 1.0):
         cap = self.capabilities[capability] #will throw keyerror if it's not right
         cap["callbacks"][callback] = tolerance
-    
+
     def update(self, packet):
         AqaraDevice.update(self,packet)
         if self.last_cmd == "report":
@@ -109,7 +114,7 @@ class AqaraSensor(AqaraDevice):
                     self.capabilities[capability]["timestamp"] = self.last_update
                 except KeyError:
                     log.warning("Unknown capability %s"%capability)
-                    
+
     def __unicode__(self):
         str_ = AqaraDevice.__unicode__(self)
         for capability in self.capabilities:
@@ -118,14 +123,14 @@ class AqaraSensor(AqaraDevice):
             val = str(val)
             str_ += (u"%s -> %s"%(capability,val))
         return str_
-        
+
     def get_capabilities(self):
         return(self.capabilities.keys())
 
 class AqaraWeather(AqaraSensor):
     def __init__(self,model = "weather", capabilities = ["temperature","pressure","humidity","voltage"]):
         AqaraSensor.__init__(self,model = model, capabilities = capabilities)
-        
+
 class AqaraRoot:
     def __init__(self, known_devices_file = "known_devices.json"):
         self.KD = KnownDevices(known_devices_file = known_devices_file)
@@ -142,28 +147,29 @@ class AqaraRoot:
                 self.dev_by_sid[packet["sid"]] = target_device
         except KeyError:
             log.exception("__update_device: Malformed packet")
-        
+
         #target_device contains the device object
         target_device.update(packet)
         print(str(target_device))
-    
+
     def __create_device(self,packet):
         #TODO use packet["model"] to create the right object
         if packet["model"] == "weather.v1":
             return AqaraWeather(model="weather.v1")
         return AqaraDevice()
-        
+
     def handle_packet(self,data):
         try:
-            data = json.loads(data)
-            if data.get("data") is not None:
+            if isinstance(data,basestring):
+                data = json.loads(data)
+            if (data.get("data") is not None) and (isinstance(data["data"],basestring)):
                 parsed_data = json.loads(data["data"])
                 data["data"] = parsed_data
         except Exception as e:
             log.error("handle_packet: Error handling packet (%r): %r"%(data,e))
             return False
         data["context"] = self.KD.get_context(data)
-        
+
         #log.debug("New packet %s"%(json.dumps(data,indent=4)))
-        # 
+        #
         device = self.__update_device(data)
