@@ -59,6 +59,121 @@ class KnownDevices:
             log.error("get_infos: Invalid packet %r"%data)
             raise
 
+            
+import time            
+class Data:
+    def __init__(self, quantity_name, memory_depth = 10):
+        self.quantity_name = quantity_name
+        self.depth = int(memory_depth)
+        if self.depth <= 2:
+            log.warning("Data: must have a memory depth of at least 2, %d given"%memory_depth)
+        self.measurements = []
+        self.update_hook = None #overload to provide a generic update hook
+        
+        self.callbacks = dict(data_new = {} , data_change = {})
+        
+    
+    def update(self,value):
+        timestamp = time.time()
+        measurement = {"update_time": timestamp, "raw_value": value}
+        #insert measurement
+        self.measurements.insert(0,measurement)
+        self.measurements = self.measurements[0:self.depth] # pop older values
+        
+        if self.update_hook != None:
+            self.update_hook(self,measurement)
+        
+        #Launch onmeasurement
+        self.on_data_new(measurement)
+            
+        #Launch onchange
+        if (len(self.measurements) >= 2) and ( measurement != self.measurements[1]):
+            self.on_data_change(measurement,self.measurements[1])
+            
+    def get_last_measurement(self):
+        try:
+            return self.measurements[0]
+        except:
+            return None
+            
+    def get_last_value(self):
+        try:
+            measurement = self.measurements[0]
+            return measurement.get("value",measurement.get("raw_value"))
+        except:
+            return None
+    
+    def register_callback(self, callback, event_type):
+        if not event_type in ["data_new","data_change"]:
+            log.debug("Data::register_callback: unknwown event type %s"%str(event_type))
+            return False
+        else:
+            self.callbacks[event_type][callback] = True
+            return True
+    
+    def unregister_callback(self, callback, event_type = "all_events"):
+        if event_type == "all_events":
+            for evtype in self.callbacks.keys():
+                try:
+                    del(self.callbacks[evtype][callback])
+                except:
+                    pass
+        else:
+            try:
+                del(self.callbacks[event_type][callback])
+            except:
+                pass
+    
+    def on_data_new(self,new_measurement):
+        for callback in self.callbacks["data_new"].keys():
+            callback(new_measurement)
+        
+    def on_data_change(self, new_measurement, old_measurement):
+            if old_measurement is None:
+                log.debug("%s first value is %r"%(self.quantity_name,new_measurement["raw_value"]))
+                return
+            log.debug("%s changed from %r to %r (%ds)\n"%(self.quantity_name,new_measurement["raw_value"],old_measurement["raw_value"], int(new_measurement["update_time"] - old_measurement["update_time"])))
+            for callback in self.callbacks["data_change"].keys():
+                callback(new_measurement,old_measurement)
+        
+            
+class NumericData(Data):
+    def __init__(self,quantity_name,memory_depth = 10):
+        Data.__init__(self,quantity_name,memory_depth = memory_depth)
+    
+        def update_hook(self,measurement):
+            measurement["value"] = float(measurement["raw_value"])
+            log.debug("NumericData update hook %r"%measurement)
+        self.update_hook = update_hook
+
+
+class WeatherData(NumericData):
+    def __init__(self,quantity_name,memory_depth = 10):
+        Data.__init__(self,quantity_name,memory_depth = memory_depth)
+        
+        def update_hook(self,measurement):
+            measurement["value"] = float(measurement["raw_value"]) / 100.0
+            log.debug("Saving value %.2f for capability %s"%(measurement["value"],self.quantity_name))
+        self.update_hook = update_hook
+
+class TemperatureUnits:
+    CELSIUS = 0
+    FARENHEIGHT = 1   
+    
+class TemperatureData(WeatherData):
+    def __init__(self,memory_depth = 10, unit = TemperatureUnits.CELSIUS):
+        WeatherData.__init__(self,"temperature",memory_depth = memory_depth)
+        
+class PressureData(WeatherData):
+    def __init__(self,memory_depth = 10):
+        WeatherData.__init__(self,"pressure",memory_depth = memory_depth)
+
+class HumidityData(WeatherData):
+    def __init__(self,memory_depth = 10):
+        WeatherData.__init__(self,"pressure",memory_depth = memory_depth)  
+
+        
+
 import time
 class AqaraDevice:
     def __init__(self, model = "unknown"):
@@ -89,24 +204,35 @@ class AqaraDevice:
     def __str__(self):
         return unicode(self).encode("utf-8")
 
+        
+        
+
 class AqaraSensor(AqaraDevice):
     def __init__(self, model= "unknown", capabilities = []):
         AqaraDevice.__init__(self,model=model)
         self.capabilities = {}
-        for capability in capabilities:
-            self.capabilities[capability] = { "value": None, "callbacks": {}, "timestamp": 0.0}
-        
-    def register_callback(self,callback,capability, tolerance = 1.0):
-        cap = self.capabilities[capability] #will throw keyerror if it's not right
-        cap["callbacks"][callback] = tolerance
     
     def update(self, packet):
         AqaraDevice.update(self,packet)
-        if self.last_cmd == "report":
+        if self.last_cmd == "report" or self.last_cmd == "heartbeat":
             for capability in self.last_data.keys():
                 try:
-                    self.capabilities[capability]["value"] = self.last_data[capability]
-                    self.capabilities[capability]["timestamp"] = self.last_update
+                    data_obj = self.capabilities.get(capability,None)
+                    if data_obj is None:
+                        #Doesn't exist yet
+                        #create
+                        if capability   == "temperature":
+                            data_obj = TemperatureData()
+                        elif capability == "pressure":
+                            data_obj = PressureData()
+                        elif capability == "humidity":
+                            data_obj = HumidityData()
+                        else:
+                            data_obj = Data(capability)
+
+                        self.capabilities[capability] = data_obj
+                    data_obj.update(self.last_data[capability])
+                    
                 except KeyError:
                     log.warning("Unknown capability %s"%capability)
                     
@@ -114,7 +240,7 @@ class AqaraSensor(AqaraDevice):
         str_ = AqaraDevice.__unicode__(self)
         for capability in self.capabilities:
             str_ += u"\n\t"
-            val = self.capabilities[capability]["value"]
+            val = self.capabilities[capability].get_last_value()
             val = str(val)
             str_ += (u"%s -> %s"%(capability,val))
         return str_
@@ -122,9 +248,20 @@ class AqaraSensor(AqaraDevice):
     def get_capabilities(self):
         return(self.capabilities.keys())
 
+        
+        
+        
+        
+        
 class AqaraWeather(AqaraSensor):
     def __init__(self,model = "weather", capabilities = ["temperature","pressure","humidity","voltage"]):
         AqaraSensor.__init__(self,model = model, capabilities = capabilities)
+
+        
+        
+        
+        
+        
         
 class AqaraRoot:
     def __init__(self, known_devices_file = "known_devices.json"):
@@ -151,7 +288,7 @@ class AqaraRoot:
         #TODO use packet["model"] to create the right object
         if packet["model"] == "weather.v1":
             return AqaraWeather(model="weather.v1")
-        return AqaraDevice()
+        return AqaraSensor(model = packet["model"])
         
     def handle_packet(self,data):
         try:
