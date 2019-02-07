@@ -285,13 +285,17 @@ class NoMotionData(NumericData):
 class VoltageData(NumericData):
     def __init__(self,sid,memory_depth = 10):
         NumericData.__init__(self,"voltage",sid,memory_depth = memory_depth)
+        def update_hook(self,measurement):
+            value = int(measurement["raw_value"])
+            value = 100.0 * ((value - 2700.0) / (3100.0 - 2700.0))
+            measurement["value"] = value
+        self.update_hook = update_hook
 
 
 # ###
 class WeatherData(NumericData):
     def __init__(self,quantity_name, sid, memory_depth = 10):
         NumericData.__init__(self,quantity_name, sid, memory_depth = memory_depth)
-
         def update_hook(self,measurement):
             measurement["value"] = float(measurement["raw_value"]) / 100.0
             log.debug("Saving value %.2f for capability %s"%(measurement["value"],self.quantity_name))
