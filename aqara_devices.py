@@ -147,13 +147,22 @@ class Data:
             callback(new_measurement,old_measurement)
         try:
             diff = float(new_measurement["value"]) - float(old_measurement["value"])
-            log.debug("[%s] Difference for %s : %.2f"%(self.sid,self.quantity_name,diff))
+            log.info("[%s] Difference for %s : %.2f"%(self.sid,self.quantity_name,diff))
         except:
             pass
         
         if self.data_change_hook is not None:
             self.data_change_hook(self, new_measurement, old_measurement)
-        
+# ##
+class SwitchStatusData(Data):
+    def __init__(self, sid, memory_depth = 10):
+        Data.__init__(self,"status", sid, memory_depth = memory_depth)
+        self.statuses=[]
+        def update_hook(self,measurement):
+            if measurement["raw_value"] not in self.statuses:
+                self.statuses.append(measurement["raw_value"])
+                log.warning("adding unknown status %s"%(measurement["raw_value"]))
+        self.update_hook = update_hook
 # ##            
 class NumericData(Data):
     def __init__(self,quantity_name, sid, memory_depth = 10):
@@ -307,7 +316,10 @@ class AqaraSensor(AqaraDevice):
                 data_obj = HumidityData(self.sid)
             elif capability == "voltage":
                 data_obj = VoltageData(self.sid)
+            elif capability == "status":
+                data_obj = SwitchStatusData(self.sid)
             else:
+                log.warning("Creating default Data structure for capability [%s]"%capability)
                 data_obj = Data(capability,self.sid)
 
             self.capabilities[capability] = data_obj

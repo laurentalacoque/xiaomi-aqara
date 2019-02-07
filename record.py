@@ -20,11 +20,18 @@ def replay():
     import logging
     logging.getLogger(__name__)
     logging.basicConfig(level=logging.DEBUG)
+    logging.getLogger("aqara_devices").setLevel(logging.WARNING)
     root = AD.AqaraRoot()
     with open(record_file,"r") as logfile:
         lines = logfile.readlines()
-    for line in lines:
+    for i,line in enumerate(lines):
         root.handle_packet(line)
+
+    for model in root.dev_by_model.keys():
+        print("%s: %d devices"%(model,len(root.dev_by_model[model])))
+        
+        print("\t" + " ".join(root.dev_by_model[model].keys()[0].get_capabilities()))
+            
         
 if __name__ == "__main__":
     import argparse
