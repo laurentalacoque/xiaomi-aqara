@@ -8,7 +8,7 @@ except:
     pass
 log=logging.getLogger(__name__)
 
-#################################################################################################################    
+#################################################################################################################
 class KnownDevices:
     def __init__(self,known_devices_file = "known_devices.json"):
         self.known_devices_file = known_devices_file
@@ -65,7 +65,7 @@ class KnownDevices:
             log.error("get_infos: Invalid packet %r"%data)
             raise
 
-#################################################################################################################               
+#################################################################################################################
 import time
 
 # #
@@ -79,40 +79,40 @@ class Data:
         self.measurements = []
         self.update_hook = None #overload to provide a generic update hook
         self.data_change_hook = None
-        
+
         self.callbacks = dict(data_new = {} , data_change = {})
-        
-    
+
+
     def update(self,value):
         timestamp = time.time()
         measurement = {"sid":self.sid, "type": self.quantity_name,"update_time": timestamp, "raw_value": value, "value": value}
         #insert measurement
         self.measurements.insert(0,measurement)
         self.measurements = self.measurements[0:self.depth] # pop older values
-        
+
         if self.update_hook != None:
             self.update_hook(self,measurement)
-        
+
         #Launch onmeasurement
         self.on_data_new(measurement)
-            
+
         #Launch onchange
         if (len(self.measurements) >= 2) and ( measurement != self.measurements[1]):
             self.on_data_change(measurement,self.measurements[1])
-            
+
     def get_measurement(self, index=0):
         try:
             return self.measurements[index]
         except:
             return None
-            
+
     def get_value(self,index=0):
         try:
             measurement = self.measurements[index]
             return measurement.get("value",measurement.get("raw_value"))
         except:
             return None
-    
+
     def register_callback(self, callback, event_type):
         if not event_type in ["data_new","data_change"]:
             log.debug("Data::register_callback: unknwown event type %s"%str(event_type))
@@ -120,7 +120,7 @@ class Data:
         else:
             self.callbacks[event_type][callback] = True
             return True
-    
+
     def unregister_callback(self, callback, event_type = "all_events"):
         if event_type == "all_events":
             for evtype in self.callbacks.keys():
@@ -133,11 +133,11 @@ class Data:
                 del(self.callbacks[event_type][callback])
             except:
                 pass
-    
+
     def on_data_new(self,new_measurement):
         for callback in self.callbacks["data_new"].keys():
             callback(new_measurement)
-        
+
     def on_data_change(self, new_measurement, old_measurement):
         if old_measurement is None:
             log.debug("%s first value is %r"%(self.quantity_name,new_measurement["raw_value"]))
@@ -150,30 +150,74 @@ class Data:
             log.info("[%s] Difference for %s : %.2f"%(self.sid,self.quantity_name,diff))
         except:
             pass
-        
+
         if self.data_change_hook is not None:
             self.data_change_hook(self, new_measurement, old_measurement)
+# ##
+class IPData(Data):
+    def __init__(self, sid, memory_depth = 10):
+        Data.__init__(self,"ip", sid, memory_depth = memory_depth)
+
+# ##
+class RGBData(Data):
+    def __init__(self, sid, memory_depth = 10):
+        Data.__init__(self,"rgb", sid, memory_depth = memory_depth)
+
 # ##
 class SwitchStatusData(Data):
     def __init__(self, sid, memory_depth = 10):
         Data.__init__(self,"status", sid, memory_depth = memory_depth)
-        self.statuses=[]
+        self.statuses=["click","double_click","long_click_press","long_click_release"]
         def update_hook(self,measurement):
             if measurement["raw_value"] not in self.statuses:
                 self.statuses.append(measurement["raw_value"])
-                log.warning("adding unknown status %s"%(measurement["raw_value"]))
+                log.warning("adding unknown status '%s'"%(measurement["raw_value"]))
         self.update_hook = update_hook
-# ##            
+
+# ##
+class MotionStatusData(Data):
+    def __init__(self, sid, memory_depth = 10):
+        Data.__init__(self,"status", sid, memory_depth = memory_depth)
+        self.statuses=["motion"]
+        def update_hook(self,measurement):
+            if measurement["raw_value"] not in self.statuses:
+                self.statuses.append(measurement["raw_value"])
+                log.warning("adding unknown status '%s'"%(measurement["raw_value"]))
+        self.update_hook = update_hook
+
+# ##
+class MagnetStatusData(Data):
+    def __init__(self, sid, memory_depth = 10):
+        Data.__init__(self,"status", sid, memory_depth = memory_depth)
+        self.statuses=["open","close"]
+        def update_hook(self,measurement):
+            if measurement["raw_value"] not in self.statuses:
+                self.statuses.append(measurement["raw_value"])
+                log.warning("adding unknown status '%s'"%(measurement["raw_value"]))
+        self.update_hook = update_hook
+
+# ##
+class CubeStatusData(Data):
+    def __init__(self, sid, memory_depth = 10):
+        Data.__init__(self,"status", sid, memory_depth = memory_depth)
+        self.statuses=["alert","shake_air","flip90","flip180"]
+        def update_hook(self,measurement):
+            if measurement["raw_value"] not in self.statuses:
+                self.statuses.append(measurement["raw_value"])
+                log.warning("adding unknown status '%s'"%(measurement["raw_value"]))
+        self.update_hook = update_hook
+
+# ##
 class NumericData(Data):
     def __init__(self,quantity_name, sid, memory_depth = 10):
         Data.__init__(self,quantity_name, sid, memory_depth = memory_depth)
         self.callbacks["data_change_coarse"] = {}
-        
+
         def update_hook(self,measurement):
             measurement["value"] = float(measurement["raw_value"])
             log.debug("NumericData update hook %r"%measurement)
         self.update_hook = update_hook
-        
+
         def significant_change_hook(self,new_measurement, old_measurement):
             #import pdb; pdb.set_trace()
             current_value = new_measurement["value"]
@@ -193,24 +237,49 @@ class NumericData(Data):
                     if (current_value > old_value_rounded + precision) or (current_value < old_value_rounded - precision):
                         #generate event
                         callback(new_measurement,cbvalue["last_measurement"])
-                    
+
                 except Exception as e:
                     log.debug("NumericData: Significant change hook: %r"%e)
                     pass
         self.data_change_hook = significant_change_hook
-        
+
     def register_callback_on_significant_change(self, callback, precision):
         log.debug("Registering on_change with precision %r"%precision)
         try:
             precision = float(precision)
-            if precision < 0.0: 
+            if precision < 0.0:
                 raise
             if precision <= 0.01:
                 self.register_callback(callback,"data_change")
         except:
             raise ValueError("precision must be a positive number")
-        
+
         self.callbacks["data_change_coarse"][callback] = { "precision": precision, "last_value": None, "last_measurement": None}
+
+# ###
+class LuxData(NumericData):
+    def __init__(self,sid,memory_depth = 10):
+        NumericData.__init__(self,"lux",sid,memory_depth = memory_depth)
+
+# ###
+class IlluminationData(NumericData):
+    def __init__(self,sid,memory_depth = 10):
+        NumericData.__init__(self,"illumination",sid,memory_depth = memory_depth)
+
+# ###
+class CubeRotateData(NumericData):
+    def __init__(self,sid,memory_depth = 10):
+        NumericData.__init__(self,"rotate",sid,memory_depth = memory_depth)
+        def update_hook(self,measurement):
+            measurement["value"] = float(measurement["raw_value"].replace(",","."))
+            log.debug("NumericData update hook %r"%measurement)
+        self.update_hook = update_hook
+
+
+# ###
+class NoMotionData(NumericData):
+    def __init__(self,sid,memory_depth = 10):
+        NumericData.__init__(self,"no_motion",sid,memory_depth = memory_depth)
 
 # ###
 class VoltageData(NumericData):
@@ -218,11 +287,11 @@ class VoltageData(NumericData):
         NumericData.__init__(self,"voltage",sid,memory_depth = memory_depth)
 
 
-# ###   
+# ###
 class WeatherData(NumericData):
     def __init__(self,quantity_name, sid, memory_depth = 10):
         NumericData.__init__(self,quantity_name, sid, memory_depth = memory_depth)
-        
+
         def update_hook(self,measurement):
             measurement["value"] = float(measurement["raw_value"]) / 100.0
             log.debug("Saving value %.2f for capability %s"%(measurement["value"],self.quantity_name))
@@ -230,14 +299,14 @@ class WeatherData(NumericData):
 
 class TemperatureUnits:
     CELSIUS = 0
-    FARENHEIGHT = 1   
+    FARENHEIGHT = 1
 
 # ####
 class TemperatureData(WeatherData):
     def __init__(self,sid, memory_depth = 10,unit = TemperatureUnits.CELSIUS):
         WeatherData.__init__(self,"temperature", sid, memory_depth = memory_depth)
-        
-# ####        
+
+# ####
 class PressureData(WeatherData):
     def __init__(self, sid, memory_depth = 10):
         WeatherData.__init__(self,"pressure", sid, memory_depth = memory_depth)
@@ -245,9 +314,9 @@ class PressureData(WeatherData):
 # ####
 class HumidityData(WeatherData):
     def __init__(self,sid, memory_depth = 10):
-        WeatherData.__init__(self,"humidity", sid, memory_depth = memory_depth)  
+        WeatherData.__init__(self,"humidity", sid, memory_depth = memory_depth)
 
-#################################################################################################################    
+#################################################################################################################
 import time
 class AqaraDevice:
     def __init__(self, sid, model):
@@ -278,15 +347,15 @@ class AqaraDevice:
     def __str__(self):
         return unicode(self).encode("utf-8")
 
-        
-        
+
+
 
 class AqaraSensor(AqaraDevice):
     def __init__(self, sid, model, capabilities = []):
         AqaraDevice.__init__(self, sid, model)
         self.capabilities = {}
         self.__create_capabilities(capabilities)
-        
+
     def __create_capabilities(self,capabilities_list):
         """ create data holders based on capabilities names (such as "temperature", "pressure",...)"""
         def onchange(new_measurement,old_measurement):
@@ -316,10 +385,32 @@ class AqaraSensor(AqaraDevice):
                 data_obj = HumidityData(self.sid)
             elif capability == "voltage":
                 data_obj = VoltageData(self.sid)
-            elif capability == "status":
-                data_obj = SwitchStatusData(self.sid)
+            elif (capability == "status"):
+                if (self.model == "switch") or (self.model == "sensor_switch.aq2"):
+                    data_obj = SwitchStatusData(self.sid)
+                elif (self.model == "sensor_motion.aq2"):
+                    data_obj = MotionStatusData(self.sid)
+                elif (self.model == "magnet") or (self.model == "sensor_magnet.aq2"):
+                    data_obj = MagnetStatusData(self.sid)
+                elif self.model == "cube":
+                    data_obj = CubeStatusData(self.sid)
+                else:
+                    log.warning("%s Creating default Data structure for capability [%s]"%(self.model,capability))
+                    data_obj = Data(capability,self.sid)
+            elif capability == "no_motion":
+                    data_obj = NoMotionData(self.sid)
+            elif capability == "rotate":
+                    data_obj = CubeRotateData(self.sid)
+            elif capability == "lux":
+                    data_obj = LuxData(self.sid)
+            elif capability == "illumination":
+                    data_obj = IlluminationData(self.sid)
+            elif capability == "ip":
+                    data_obj = IPData(self.sid)
+            elif capability == "rgb":
+                    data_obj = RGBData(self.sid)
             else:
-                log.warning("Creating default Data structure for capability [%s]"%capability)
+                log.warning("%s Creating default Data structure for capability [%s]"%(self.model,capability))
                 data_obj = Data(capability,self.sid)
 
             self.capabilities[capability] = data_obj
@@ -354,13 +445,17 @@ class AqaraWeather(AqaraSensor):
     def __init__(self,sid, model, capabilities = ["temperature","pressure","humidity","voltage"]):
         AqaraSensor.__init__(self,sid,model, capabilities = capabilities)
 
+class AqaraMotion(AqaraSensor):
+    def __init__(self,sid, model, capabilities = ["voltage","status","no_motion"]):
+        AqaraSensor.__init__(self,sid,model, capabilities = capabilities)
+
 class AqaraMagnet(AqaraSensor):
     def __init__(self,sid, model, capabilities = ["voltage","status"]):
         AqaraSensor.__init__(self,sid,model, capabilities = capabilities)
 
 class AqaraMotion(AqaraSensor):
     def __init__(self,sid, model, capabilities = ["lux","status","no_motion","voltage"]):
-        AqaraSensor.__init__(self,sid,model, capabilities = capabilities)    
+        AqaraSensor.__init__(self,sid,model, capabilities = capabilities)
 
 class AqaraSwitch(AqaraSensor):
     def __init__(self,sid, model, capabilities = ["status","voltage"]):
@@ -369,7 +464,7 @@ class AqaraSwitch(AqaraSensor):
 class AqaraCube(AqaraSwitch):
     def __init__(self,sid, model, capabilities = ["status","voltage","rotate"]):
         AqaraSensor.__init__(self,sid,model, capabilities = capabilities)
-        
+
 #####################
 class AqaraController(AqaraSensor): #Every controller reports events, hence inheritance to Sensor
     def __init__(self,sid,model,capabilities=[]):
@@ -379,7 +474,7 @@ class AqaraGateway(AqaraController):
     def __init__(self,sid, model, capabilities=["ip","illumination","rgb"]):
         AqaraController.__init__(self,sid,"gateway",capabilities=capabilities)
 
-#################################################################################################################    
+#################################################################################################################
 class AqaraRoot:
     def __init__(self, known_devices_file = "known_devices.json"):
         self.KD = KnownDevices(known_devices_file = known_devices_file)
@@ -431,7 +526,7 @@ class AqaraRoot:
         #TODO use packet["model"] to create the right object
         model = packet["model"]
         sid   = packet["sid"]
-        
+
         if (model == "weather.v1") or (model == "weather.v2"):
             return AqaraWeather(sid,model)
         elif (model == "gateway"):
