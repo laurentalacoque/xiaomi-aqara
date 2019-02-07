@@ -15,7 +15,7 @@ def record():
     print("Starting listening loop")
     while(True):
         connector.check_incoming()
-        
+
 def replay():
     import logging
     logging.getLogger(__name__)
@@ -29,10 +29,17 @@ def replay():
 
     for model in root.dev_by_model.keys():
         print("%s: %d devices"%(model,len(root.dev_by_model[model])))
-        
-        print("\t" + " ".join(root.dev_by_model[model].keys()[0].get_capabilities()))
-            
-        
+        for i,device in enumerate(root.dev_by_model[model]):
+            print("\t%s %d [%s][%s] %s"%(model,i,device.context.get("room"),device.context.get("name"),device.sid))
+            for capability in device.get_capabilities():
+                print("\t\t%s"%capability)
+                for i in range(40):
+                    value = device.capabilities[capability].get_value(index=i)
+                    if value is None:
+                        break
+                    print("\t\t\t%r"%value)
+        print("")
+
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser(description="Aqara event logger")
@@ -42,9 +49,9 @@ if __name__ == "__main__":
     parser.add_argument("-p", "--replay",
                     help="Replays aqara packets stored in %s"%record_file,
                     action="store_true")
-    
+
     args = parser.parse_args()
-    
+
     if (args.replay and args.record):
         print("Error, choose only one option")
         import sys
