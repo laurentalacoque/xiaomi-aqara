@@ -136,8 +136,18 @@ class Data:
 
     def on_data_new(self,new_measurement):
         data = {"data_obj":self, "value": new_measurement["value"], "event_type": "data_new", "measurement":new_measurement, "source_device": self.device}
+        failed_callbacks = []
         for callback in self.callbacks["data_new"].keys():
-            callback(new_measurement)
+            try:
+                callback(new_measurement)
+            except:
+                log.exception("Removing offending callback because of exception")
+                failed_callbacks.append(callback)
+        for callback in failed_callbacks
+            try:
+                del(self.callbacks["data_new"][callback])
+            except:
+                pass
 
     def on_data_change(self, new_measurement, old_measurement):
         if old_measurement is None:
@@ -145,14 +155,28 @@ class Data:
             return
         log.debug("[%s] %s changed from %r to %r (%ds)\n"%(self.device.sid,self.quantity_name,new_measurement["raw_value"],old_measurement["raw_value"], int(new_measurement["update_time"] - old_measurement["update_time"])))
         data = {"data_obj":self, "value": new_measurement["value"], "event_type": "data_change", "new_measurement":new_measurement, "old_measurement":old_measurement, "source_device": self.device}
+        
+        failed_callbacks=[]
         for callback in self.callbacks["data_change"].keys():
-            callback(data)
+            try:
+                callback(data)
+            except:
+                log.exception("Data:on_data_change:Removing offending callback")
+                failed_callbacks.append(callback)
+        for callback in failed_callbacks
+            try:
+                del(self.callbacks["data_change"][callback])
+            except:
+                pass
+
+        
+        
         try:
             diff = float(new_measurement["value"]) - float(old_measurement["value"])
             log.info("[%s] Difference for %s : %.2f"%(self.device.sid,self.quantity_name,diff))
         except:
             pass
-
+        
         if self.data_change_hook is not None:
             self.data_change_hook(self, new_measurement, old_measurement)
 # ##

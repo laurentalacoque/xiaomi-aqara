@@ -7,9 +7,11 @@ import logging
 log=logging.getLogger(__name__)
 logging.basicConfig(level=logging.DEBUG)
 logging.getLogger("aqara_devices").setLevel(logging.WARNING)
-    
+
+import time    
 def logit(address,devicetype,data):
     print(data)
+    data["_ts_"] = time.time()
     with open ( record_file,"a") as logfile:
         logfile.write(json.dumps(data) + "\n")
 
@@ -48,14 +50,27 @@ def new_device(data):
     except:
         log.exception("on_new_device")
     
-def replay():
+def replay(speed=None):
     
     root = AD.AqaraRoot()
     root.register_callback(new_device,"device_new")
+
     with open(record_file,"r") as logfile:
         lines = logfile.readlines()
+    
+    last_time = 0.
     for i,line in enumerate(lines):
+        data = json.loads(line)
+        ts = float(data.get("_ts_"))
+        if (ts is not None):
+            if (speed is not None):
+                if last_time == 0.
+                    last_time = ts
+                time.sleep(ts - last_time)
+            last_time = ts
+            
         root.handle_packet(line)
+    
     return
     for model in root.dev_by_model.keys():
         print("%s: %d devices"%(model,len(root.dev_by_model[model])))
