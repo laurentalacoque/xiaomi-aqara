@@ -61,10 +61,13 @@ def replay(speed=None):
     last_time = 0.
     for i,line in enumerate(lines):
         data = json.loads(line)
-        ts = float(data.get("_ts_"))
+        
+        #if speed is not none, replay with timestamps
+        ts = data.get("_ts_")
         if (ts is not None):
             if (speed is not None):
-                if last_time == 0.
+                ts=float(ts)
+                if last_time == 0. :
                     last_time = ts
                 time.sleep(ts - last_time)
             last_time = ts

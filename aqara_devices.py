@@ -143,7 +143,7 @@ class Data:
             except:
                 log.exception("Removing offending callback because of exception")
                 failed_callbacks.append(callback)
-        for callback in failed_callbacks
+        for callback in failed_callbacks:
             try:
                 del(self.callbacks["data_new"][callback])
             except:
@@ -163,7 +163,7 @@ class Data:
             except:
                 log.exception("Data:on_data_change:Removing offending callback")
                 failed_callbacks.append(callback)
-        for callback in failed_callbacks
+        for callback in failed_callbacks:
             try:
                 del(self.callbacks["data_change"][callback])
             except:
