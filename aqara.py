@@ -11,7 +11,7 @@ import json
 import diffusion_server as DS
 import logging
 log = logging.getLogger(__name__)
-logging.getLogger("diffusion_server").setLevel(logging.DEBUG)
+#logging.getLogger("diffusion_server").setLevel(logging.DEBUG)
 
 
 

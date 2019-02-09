@@ -2,8 +2,8 @@ import aqara
 import json
 import logging
 logging.getLogger(__name__)
-logging.basicConfig(level=logging.DEBUG)
-logging.getLogger("aqara_devices").setLevel(logging.DEBUG)
+logging.basicConfig(level=logging.INFO)
+#logging.getLogger("aqara_devices").setLevel(logging.WARNING)
 import aqara_devices as AD
 
 root = AD.AqaraRoot()
