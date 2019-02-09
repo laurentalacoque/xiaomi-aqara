@@ -143,6 +143,7 @@ class DiffusionServer:
                 log.debug("Sending [%s] to %r",message,self.active_connections[conn])
                 conn.sendall(message)
             except:
+                log.exception("sending...")
                 with self.connections_lock:
                     try:
                         connection_infos = self.active_connections[conn]
