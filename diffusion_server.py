@@ -8,7 +8,6 @@ log = logging.getLogger(__name__)
 DEFAULT_PORT = 10001
 class DiffusionClient:
     def __init__(self, callback, server_address, server_port = DEFAULT_PORT):
-
         self.server_address = server_address
         self.server_port = server_port
         self.callback = callback
@@ -21,6 +20,7 @@ class DiffusionClient:
             log.debug("Starting client thread")
             try:
                 sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                sock.setblocking(1)
                 conninfo = (self.server_address, self.server_port)
                 log.info("Connecting to %s:%d"%conninfo)
                 sock.connect(conninfo)
@@ -30,6 +30,8 @@ class DiffusionClient:
                     readable, writable, exceptional = select.select(incoming,[],[],timeout)
                     if sock in readable:
                         message = sock.recv(1024)
+                        if len(message) == 0:
+                            continue
                         log.debug("Received %d bytes"%(len(message)))
                         try:
                             self.callback(message)
@@ -146,6 +148,7 @@ class DiffusionServer:
                         connection_infos = self.active_connections[conn]
                         del(self.active_connections[conn])
                         log.info("Removing connection to %r %r"%connection_infos)
+                        conn.close()
                     except:
                         log.exception("removing connection")
 
