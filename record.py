@@ -21,7 +21,14 @@ def record():
     print("Starting listening loop")
     with connector:
         while(True):
-            connector.check_incoming()
+            try:
+                connector.check_incoming()
+            except KeyboardInterrupt:
+                connector.stop()
+                sys.exit(0)
+            except:
+                log.error("Exception, retrying")
+
 def new_temp(data):
     return
     log.info("new_temp [%s/%s]: %.2f"%(data["source_device"].context.get("room",""), data["source_device"].context.get("room",""), data["value"]))

@@ -38,7 +38,7 @@ class DiffusionClient:
                         except Exception as e:
                             log.error("Error while receiving: %s"%str(e))
                             log.exception("receiving")
-                            self.exception_queue.put(e)
+                            #self.exception_queue.put(e)
 
 
                 log.info("Exiting client on request")

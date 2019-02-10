@@ -79,6 +79,11 @@ class AquaraConnector:
             log.debug("Calling callback")
             self.data_callback(addr[0], 'aquara', payload)
 
+    def stop(self):
+        if self.server is not None:
+            self.server.stop()
+        if self.client is not None:
+            self.client.stop()
 
     def check_incoming(self):
         """Check incoming data."""
