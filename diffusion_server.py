@@ -53,6 +53,8 @@ class DiffusionClient:
         self.client_thread = threading.Thread(target=client,name="client_thread")
         self.client_thread.start()
 
+    def __enter__(self):
+        return self
     def __exit__(self, exception_type, exception_value, traceback):
         self.fatal_event.set()
 
@@ -117,6 +119,8 @@ class DiffusionServer:
         self.server_thread = threading.Thread(target=server,name="server_thread")
         self.server_thread.start()
 
+    def __enter__(self):
+        return self
     def __exit__(self, exception_type, exception_value, traceback):
         self.fatal_event.set()
 

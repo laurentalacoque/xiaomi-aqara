@@ -33,6 +33,12 @@ class AquaraConnector:
         if start_server:
            self.server = DS.DiffusionServer()
 
+    def __enter__(self):
+        return self
+    def __exit__(self, exception_type, exception_value, traceback):
+        if self.server is not None:
+            self.server.stop()
+
     def _prepare_socket(self):
         sock = socket.socket(socket.AF_INET,  # Internet
                              socket.SOCK_DGRAM)  # UDP
@@ -69,18 +75,15 @@ class AquaraConnector:
         """Check incoming data."""
         data, addr = self.socket.recvfrom(self.SOCKET_BUFSIZE)
         try:
+            if self.server is not None:
+                self.server.check_and_raise()
+        except Exception as e:
+            log.exception("Internal server error")
+            raise e
+        try:
             #print('Aquara received from ' + addr[0] + ' : ' + data)
             self.__data_callback(data,addr)
-
         except Exception as e:
             raise
             print("Can't handle message %r (%r)" % (data, e))
 
-    def handle_incoming_data(self, payload, addr):
-        """Handle an incoming payload, save related data if needed,
-        and use the callback if there is one.
-        """
-        if isinstance(payload.get('data', None), basestring):
-            cmd = payload["cmd"]
-            if cmd in ["heartbeat", "report"]:
-                self.__data_callback(payload, addr)
