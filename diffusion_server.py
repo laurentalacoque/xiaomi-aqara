@@ -53,9 +53,12 @@ class DiffusionClient:
         self.client_thread = threading.Thread(target=client,name="client_thread")
         self.client_thread.start()
 
-    def stop(self):
-        self.check_and_raise()
+    def __exit__(self, exception_type, exception_value, traceback):
         self.fatal_event.set()
+
+    def stop(self):
+        self.fatal_event.set()
+        self.check_and_raise()
 
     def is_alive(self):
         self.check_and_raise()
@@ -114,13 +117,16 @@ class DiffusionServer:
         self.server_thread = threading.Thread(target=server,name="server_thread")
         self.server_thread.start()
 
+    def __exit__(self, exception_type, exception_value, traceback):
+        self.fatal_event.set()
+
     def has_clients(self):
         self.check_and_raise()
         return len(self.active_connections.keys()) != 0
 
     def stop(self):
-        self.check_and_raise()
         self.fatal_event.set()
+        self.check_and_raise()
 
     def is_started(self):
         return self.server_started.is_set() and (not self.fatal_event.is_set())
