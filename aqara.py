@@ -28,7 +28,14 @@ class AquaraConnector:
         """Initialize the connector."""
         self.data_callback = data_callback
         self.last_tokens = dict()
-        self.socket = self._prepare_socket()
+        self.client = None
+        try:
+            self.socket = self._prepare_socket()
+        except:
+            self.socket = None
+            log.warning("Unable to bind socket (%r), trying client instead")
+            self.client = DS.DiffusionClient(self.__data_callback,"localhost")
+
         self.server = None
         if start_server:
            self.server = DS.DiffusionServer()
@@ -38,6 +45,8 @@ class AquaraConnector:
     def __exit__(self, exception_type, exception_value, traceback):
         if self.server is not None:
             self.server.stop()
+        if self.client is not None:
+            self.client.stop()
 
     def _prepare_socket(self):
         sock = socket.socket(socket.AF_INET,  # Internet
@@ -73,17 +82,22 @@ class AquaraConnector:
 
     def check_incoming(self):
         """Check incoming data."""
-        data, addr = self.socket.recvfrom(self.SOCKET_BUFSIZE)
         try:
+            if self.socket is not None:
+                data, addr = self.socket.recvfrom(self.SOCKET_BUFSIZE)
+                try:
+                    #print('Aquara received from ' + addr[0] + ' : ' + data)
+                    self.__data_callback(data,addr)
+                except Exception as e:
+                    raise
+                    print("Can't handle message %r (%r)" % (data, e))
+
             if self.server is not None:
                 self.server.check_and_raise()
+
+            if self.client is not None:
+                self.client.check_and_raise()
         except Exception as e:
             log.exception("Internal server error")
             raise e
-        try:
-            #print('Aquara received from ' + addr[0] + ' : ' + data)
-            self.__data_callback(data,addr)
-        except Exception as e:
-            raise
-            print("Can't handle message %r (%r)" % (data, e))
 

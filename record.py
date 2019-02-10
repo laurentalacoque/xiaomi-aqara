@@ -8,7 +8,7 @@ log=logging.getLogger(__name__)
 logging.basicConfig(level=logging.DEBUG)
 logging.getLogger("aqara_devices").setLevel(logging.WARNING)
 
-import time    
+import time
 def logit(address,devicetype,data):
     print(data)
     data["_ts_"] = time.time()
@@ -19,18 +19,19 @@ def record():
     print("Attaching to Aqara Connector")
     connector = aqara.AquaraConnector(data_callback=logit)
     print("Starting listening loop")
-    while(True):
-        connector.check_incoming()
+    with connector:
+        while(True):
+            connector.check_incoming()
 def new_temp(data):
     return
     log.info("new_temp [%s/%s]: %.2f"%(data["source_device"].context.get("room",""), data["source_device"].context.get("room",""), data["value"]))
-    
+
 def temperature_change(data):
     try:
         log.info("temp_change [%s/%s] : %r (was %r)"%(data["source_device"].context.get("room",""), data["source_device"].context.get("room",""), data["value"],data["old_measurement"]["value"]))
     except:
         pass
-    
+
 def new_capability(data):
     device = data["source_device"]
     capability = data["capability"]
@@ -39,7 +40,7 @@ def new_capability(data):
     if capability == 'temperature':
         data_obj.register_callback_on_significant_change(temperature_change,0.5)
         data_obj.register_callback(new_temp,"data_change")
-    
+
 def new_device(data):
     try:
         device = data["device_object"]
@@ -49,19 +50,19 @@ def new_device(data):
         #print data
     except:
         log.exception("on_new_device")
-    
+
 def replay(speed=None):
-    
+
     root = AD.AqaraRoot()
     root.register_callback(new_device,"device_new")
 
     with open(record_file,"r") as logfile:
         lines = logfile.readlines()
-    
+
     last_time = 0.
     for i,line in enumerate(lines):
         data = json.loads(line)
-        
+
         #if speed is not none, replay with timestamps
         ts = data.get("_ts_")
         if (ts is not None):
@@ -71,9 +72,9 @@ def replay(speed=None):
                     last_time = ts
                 time.sleep(ts - last_time)
             last_time = ts
-            
+
         root.handle_packet(line)
-    
+
     return
     for model in root.dev_by_model.keys():
         print("%s: %d devices"%(model,len(root.dev_by_model[model])))

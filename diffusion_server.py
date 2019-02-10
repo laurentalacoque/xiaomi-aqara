@@ -34,9 +34,10 @@ class DiffusionClient:
                             continue
                         log.debug("Received %d bytes"%(len(message)))
                         try:
-                            self.callback(message)
+                            self.callback(message,"client_socket")
                         except Exception as e:
                             log.error("Error while receiving: %s"%str(e))
+                            log.exception("receiving")
                             self.exception_queue.put(e)
 
 
