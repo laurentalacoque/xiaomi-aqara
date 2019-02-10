@@ -13,6 +13,9 @@ def handle_packet(address,kind,data):
 connector = aqara.AquaraConnector(start_server=True,data_callback=handle_packet)
 
 import time
-while(True):
-    #print("checking data")
-    connector.check_incoming()
+with connector:
+    while(True):
+        #print("checking data")
+        connector.check_incoming()
+
+
