@@ -1,11 +1,8 @@
 """ Aqara device """
-# -*- coding: utf-8 -*-
+# coding: utf8 
+from __future__ import unicode_literals
 import json
 import logging
-try:
-    import basestring
-except:
-    pass
 log=logging.getLogger(__name__)
 
 #################################################################################################################
@@ -19,6 +16,8 @@ class KnownDevices:
         try:
             with open(self.known_devices_file) as kdf:
                 file_content=kdf.read()
+                #import pdb; pdb.set_trace()
+
                 self.known_devices = json.loads(file_content)
                 log.info("Loaded %d elements from %s"%(len(self.known_devices),self.known_devices_file))
                 return True
@@ -49,10 +48,14 @@ class KnownDevices:
 
         if data is a string (sid): the device won't be appended
         """
-        if isinstance(data,basestring):
+        if isinstance(data,str):
             #sid
-            return self.known_devices.get(data,dict(name="",room="",model="unknown"))
-        #else: must be a packet
+            context= self.known_devices.get(data,dict(name="",room="",model="unknown"))
+            log.info("context %r for %s is %r"%(context,data,context))
+            return context
+        else: 
+            #log.error("get_context, %r type: %r"%(data, type(data)))
+            pass
         try:
             sid = data["sid"]
             device_info = self.known_devices.get(sid)
@@ -62,6 +65,7 @@ class KnownDevices:
                 self.__save_known_devices()
             return self.known_devices[sid]
         except KeyError:
+            import pdb; pdb.set_trace()
             log.error("get_infos: Invalid packet %r"%data)
             raise
 
@@ -674,15 +678,15 @@ class AqaraRoot:
             device = AqaraCube(sid,model)
         else:
             log.warning("returning default Sensor for device type %s"%packet["model"])
-        device = AqaraSensor(packet["sid"],packet["model"])
+            device = AqaraSensor(packet["sid"],packet["model"])
         device.context = context
         return device
 
     def handle_packet(self,data):
         try:
-            if isinstance(data,basestring):
+            if isinstance(data,str):
                 data = json.loads(data)
-            if (data.get("data") is not None) and (isinstance(data["data"],basestring)):
+            if (data.get("data") is not None) and (isinstance(data["data"],str)):
                 parsed_data = json.loads(data["data"])
                 data["data"] = parsed_data
         except Exception as e:

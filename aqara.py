@@ -3,7 +3,6 @@
 # https://github.com/sarakha63/jeedom_xiaomihome/blob/master/resources/aquara.py
 # some adaptations were made see first commit of this file for original version
 
-#from builtins import basestring
 import socket
 import binascii
 import struct

@@ -51,9 +51,9 @@ def new_capability(data):
 def new_device(data):
     try:
         device = data["device_object"]
+        
         log.info("New device [%s/%s] (%s) id:%s"%(device.context.get("room",""),device.context.get("name",""),device.model, device.sid))
         device.register_callback(new_capability,"capability_new")
-        #import pdb; pdb.set_trace()
         #print data
     except:
         log.exception("on_new_device")

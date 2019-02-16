@@ -1,7 +1,11 @@
 import socket
 import sys
 import threading
-import Queue
+try:
+    import Queue
+except ImportError:
+    import queue as Queue
+
 import logging
 log = logging.getLogger(__name__)
 
