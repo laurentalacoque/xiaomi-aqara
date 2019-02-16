@@ -58,7 +58,7 @@ def new_device(data):
     except:
         log.exception("on_new_device")
 
-def replay(speed=None):
+def replay(speed=5):
 
     root = AD.AqaraRoot()
     root.register_callback(new_device,"device_new")
@@ -77,7 +77,8 @@ def replay(speed=None):
                 ts=float(ts)
                 if last_time == 0. :
                     last_time = ts
-                time.sleep(ts - last_time)
+                log.debug("sleeping %d s at speed %d"%(int(ts-last_time),speed))
+                time.sleep((ts - last_time)/speed)
             last_time = ts
 
         root.handle_packet(line)
