@@ -1,0 +1,17 @@
+
+dl.class {
+    border: 1px solid lightgray;
+    padding: 1em;
+}
+dl.method {
+    border-top: 2px solid lightblue;
+    padding-top: 1em;
+}
+/* no underline for class links */
+a.reference.internal {
+    text-decoration: none;
+    border: 1px solid lightgray;
+    padding: 2px 4px;
+    color: cornflowerblue;
+    border-radius: 5px;
+}
