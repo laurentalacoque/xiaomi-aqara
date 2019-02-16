@@ -7,6 +7,11 @@ log=logging.getLogger(__name__)
 
 #################################################################################################################
 class KnownDevices:
+    """Handle known devices : gives a context to **sid**
+    
+        :param known_devices_file: (str) name of file that contains informations about sids
+
+    """
     def __init__(self,known_devices_file = "known_devices.json"):
         self.known_devices_file = known_devices_file
         self.__load_known_devices()
@@ -38,8 +43,9 @@ class KnownDevices:
             return False
 
     def get_context(self,data):
-        """
-        data: a dict containing parsed aqara packet or a string containing sid
+        """Get context information about a sid or a packet
+
+            :param data: a dict containing parsed aqara packet or a string containing sid
 
         returns a dict(room = "Room", name = "Name", model = "Model")
 
@@ -578,6 +584,12 @@ class AqaraGateway(AqaraController):
 
 #################################################################################################################
 class AqaraRoot:
+    """Hub for Aqara devices
+
+        :param known_devices_file: (str) name of the file that hold device context. see :class:`KnownDevices`
+
+        To create devices and capabilities, repeatdly call :meth:`AqaraRoot.handle_packet` with aqara gateway packets
+    """
     def __init__(self, known_devices_file = "known_devices.json"):
         self.KD = KnownDevices(known_devices_file = known_devices_file)
         self.dev_by_sid = {}
@@ -590,6 +602,14 @@ class AqaraRoot:
             self.callbacks[event_type] = {}
 
     def register_callback(self, callback, event_type):
+        """Register a callback to aqara events
+
+            :param callback: your callback function
+            :param event_type: the type of event to register to
+
+            available events are: 
+                - ``"device_new"``: a new class:`AqaraDevice` was detected
+        """
         if not event_type in self.event_list:
             log.error("AqaraRoot::register_callback: unknwown event type %s"%str(event_type))
             return False
