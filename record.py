@@ -30,13 +30,13 @@ def record():
                 log.error("Exception, retrying")
 
 def new_temp(data):
-    return
     log.info("new_temp [%s/%s]: %.2f"%(data["source_device"].context.get("room",""), data["source_device"].context.get("room",""), data["value"]))
 
 def temperature_change(data):
     try:
         log.info("temp_change [%s/%s] : %r (was %r)"%(data["source_device"].context.get("room",""), data["source_device"].context.get("room",""), data["value"],data["old_measurement"]["value"]))
     except:
+        log.exception("temperature_change")
         pass
 
 def new_capability(data):
@@ -45,7 +45,7 @@ def new_capability(data):
     data_obj   = data["data_obj"]
     log.info("New capability '%s' device [%s/%s] (%s) id:%s"%(capability,device.context.get("room",""),device.context.get("name",""),device.model, device.sid))
     if capability == 'temperature':
-        data_obj.register_callback_on_significant_change(temperature_change,0.5)
+        data_obj.register_callback_with_precision(temperature_change,0.5)
         data_obj.register_callback(new_temp,"data_change")
 
 def new_device(data):
