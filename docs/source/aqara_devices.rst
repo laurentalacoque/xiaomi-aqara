@@ -34,6 +34,10 @@ AqaraDevice class
     :members:
     :inherited-members:
 
+.. autoclass:: AqaraSensor
+    :members:
+    :inherited-members:
+
 Data classes
 ------------
 
