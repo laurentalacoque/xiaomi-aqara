@@ -76,24 +76,163 @@ class KnownDevices:
             raise
 
 #################################################################################################################
+class CallbackHandler(object):
+    """A generic class to handle registering and unregistering to _events_
+        
+        :param event_list: a list of str that represent events one can subscribe to
+
+    """
+    def __init__(self,event_list):
+        self.event_list = event_list
+        self._callbacks = {}
+        for event_type in self.event_list:
+            self._callbacks[event_type] = {}
+
+    def register_callback(self, callback, event_type, private_data=None):
+        """Register a callback for an event
+
+            :param callback: a callback function with signature ``func(value: dict)``
+            :param event_type: (str) the event to regiter to. This must be an event in the ``event_list`` of the constructor
+            :param private_data: (obj) any data that will be added to the ``data`` dict argument of the callback function
+            :returns: None
+
+            :raises: ValueError : `event_type` is not in the event list
+            
+            callback methods should be fault tolerant, they will be ``try/except`` ed, if they generate an exception, their subscription will be canceled
+        """    
+        if not event_type in self.event_list:
+            log.error("register_callback: unknwown event type %s"%str(event_type))
+            raise ValueError("Unknown event %s not in event list %r"%(event_type,self.event_list))
+        else:
+            self._callbacks[event_type][callback] = {"private_data":private_data}
+
+    def unregister_callback(self, callback, event_type = "all_events"):
+        """Unregister a callback
+
+            :param callback: the callback function 
+            :param event_type: the event type to which to unregister (defaults to ``"all_events"``
+        """
+        if event_type == "all_events":
+            for evtype in _self._callbacks.keys():
+                try:
+                    del(self._callbacks[evtype][callback])
+                except:
+                    pass
+        else:
+            try:
+                del(self._callbacks[event_type][callback])
+            except KeyError:
+                raise ValueError("event %r not in event list %r"%(event_type,self.event_list))
+            except:
+                pass
+
+    def _get_callbacks_for(self,event_type):
+        """Returns the list of callbacks for ``event_type``
+            
+            :param event_type: the event
+
+            :returns: a ``dict(callback_function -> properties_dict)``
+
+            :raises: ValueError (``event_type`` is not a known event)
+
+        """
+        try:
+            callbacks = self._callbacks[event_type]
+            return callbacks
+        except KeyError:
+            raise ValueError("Unknown event %r not in list %r"%(event_type,self.event_list))
+
+    def _callback_on_event(self,event_type, data, specific_callback = None):
+        """Call subscribers back
+
+            :param event_type: the event type (must be in ``self.event_list``)
+            :param data: a dict sent to the callback function
+                if a ``private_data`` was specified during :meth:`register_callback`, it 
+                will be added to the ``data`` dict.
+                Additionnaly, the field ``"event_type"`` will be added and set to the ``event_type``
+            :param specific_callback: (callback function) if set, only this specific callback 
+                function will be called, by default (None), all callback functions that have registered
+                to the ``event_type`` will be called with argument ``data``
+
+            :returns: None
+            :raises: ValueError (bad event_type), TypeError (``data`` is not of type dict)
+        """
+        if event_type not in self._callbacks:
+            raise ValueError("Bad event_type %r not in event list %r"%(event_type,self.event_list))
+
+        failed_callbacks = []
+
+        all_callbacks = self._callbacks[event_type].keys()
+        if specific_callback is not None:
+            #replace the list of subscribers to the specific_callback alone
+            all_callbacks = [specific_callback]
+
+        for callback in all_callbacks:
+            data_ = data.copy()
+            data_["event_type"] = event_type
+
+            #add private_data if it exists
+            private_data = self._callbacks[event_type][callback].get("private_data")
+            if private_data is not None:
+                data_["private_data"] = private_data
+
+            #Launch callback, unsubscribe it if it fails
+            try:
+                callback(data_)
+            except:
+                log.exception("Removing offending callback because of exception")
+                failed_callbacks.append(callback)
+        
+        # remove all failed callbacks
+        for callback in failed_callbacks:
+            try:
+                del(self.callbacks["data_new"][callback])
+            except:
+                pass
+
 import time
 
 # #
-class Data:
-    def __init__(self, quantity_name, device, memory_depth = 10):
+class Data(CallbackHandler):
+    """Generic Data holder class with event generation
+        
+        :param quantity_name: (str) the name of the measured quantity (such as ``temperature``, ``voltage``)
+        :param device: (:class:``AqaraDevice``) the instance of the :class:``AqaraDevice`` that contains this data
+        :param memory_depth: (int) size of the data buffer
+
+        :returns: None
+        :raises: ValueError (bad memory_depth)
+
+        **Events**:
+            - ``data_new``: called on each :meth:`update` with the value provided
+                ``{"data_obj":self, "value": new_value, "event_type": "data_new", "measurement":new_measurement, "source_device": self.device}``
+            - ``data_change`` : called whenever the new data is different for the previous one
+                ``{"data_obj":self, "value": new_value, "event_type": "data_change", "new_measurement":new_measurement, "old_measurement":old_measurement, "source_device": self.device}``
+    """
+    def __init__(self, quantity_name, device, memory_depth = 10, event_list = ["data_new","data_change"]):
+        CallbackHandler.__init__(self,event_list=event_list)
         self.quantity_name = quantity_name
         self.device = device
         self.depth = int(memory_depth)
-        if self.depth <= 2:
-            log.warning("Data: must have a memory depth of at least 2, %d given"%memory_depth)
+        if self.depth < 0 :
+            raise ValueError("memory depth should be a positive number, %r given"%memory_depth)
+
         self.measurements = []
         self.update_hook = None #overload to provide a generic update hook
         self.data_change_hook = None
 
-        self.callbacks = dict(data_new = {} , data_change = {})
 
 
     def update(self,value):
+        """update the :class:`Data` with a new value
+
+            :param value: the new value
+            :returns: None
+
+            whenever a Data is updated, all clients that registered to the ``data_new`` event will get called back with the new measurement.
+            Additionnaly, if the new value is different from the previous one, a ``data_change`` event is launched and all clients to the
+            ``data_change`` event will be called.
+        """
         timestamp = time.time()
         measurement = {"source_device":self.device, "data_type": self.quantity_name,"update_time": timestamp, "raw_value": value, "value": value}
         #insert measurement
@@ -111,94 +250,69 @@ class Data:
             self.on_data_change(measurement,self.measurements[1])
 
     def get_measurement(self, index=0):
+        """Get the last _measurement_
+
+            :param index: (int, optionnal, default 0) access to older measurements with 0 the last one 
+            
+            a measurement is a ``dict`` with the following fields:
+                - ``source_device``: the :class:`AqaraDevice` instance that contain this :class:`Data`
+                - ``data_type`` : the **quantity_name** (e.g. ``"temperature"``)
+                - ``update_time`` : the ``time.time()`` at which the event was recorded
+                - ``raw_value`` : the raw value as transmitted by the device (a str)
+                - ``value`` : the ``raw_value``, reinterpreted depending on the ``quantity_name``. In the raw :class:``Data`` type, this is the same as ``raw_value``
+        """
         try:
             return self.measurements[index]
         except:
             return None
 
     def get_value(self,index=0):
+        """Get the last value recorded via :meth:`update`
+            
+            :param index: (int, optionnal, default 0) access to older value with 0 the last one 
+        """
         try:
             measurement = self.measurements[index]
             return measurement.get("value",measurement.get("raw_value"))
         except:
             return None
 
-    def register_callback(self, callback, event_type):
-        if not event_type in ["data_new","data_change"]:
-            log.error("Data::register_callback: unknwown event type %s"%str(event_type))
-            return False
-        else:
-            self.callbacks[event_type][callback] = True
-            return True
-
-    def unregister_callback(self, callback, event_type = "all_events"):
-        if event_type == "all_events":
-            for evtype in self.callbacks.keys():
-                try:
-                    del(self.callbacks[evtype][callback])
-                except:
-                    pass
-        else:
-            try:
-                del(self.callbacks[event_type][callback])
-            except:
-                pass
 
     def on_data_new(self,new_measurement):
         data = {"data_obj":self, "value": new_measurement["value"], "event_type": "data_new", "measurement":new_measurement, "source_device": self.device}
-        failed_callbacks = []
-        for callback in self.callbacks["data_new"].keys():
-            try:
-                callback(new_measurement)
-            except:
-                log.exception("Removing offending callback because of exception")
-                failed_callbacks.append(callback)
-        for callback in failed_callbacks:
-            try:
-                del(self.callbacks["data_new"][callback])
-            except:
-                pass
+        self._callback_on_event("data_new",data)
 
     def on_data_change(self, new_measurement, old_measurement):
         if old_measurement is None:
             log.debug("%s first value is %r"%(self.quantity_name,new_measurement["raw_value"]))
             return
+
         log.debug("[%s] %s changed from %r to %r (%ds)\n"%(self.device.sid,self.quantity_name,new_measurement["raw_value"],old_measurement["raw_value"], int(new_measurement["update_time"] - old_measurement["update_time"])))
         data = {"data_obj":self, "value": new_measurement["value"], "event_type": "data_change", "new_measurement":new_measurement, "old_measurement":old_measurement, "source_device": self.device}
         
-        failed_callbacks=[]
-        for callback in self.callbacks["data_change"].keys():
-            try:
-                callback(data)
-            except:
-                log.exception("Data:on_data_change:Removing offending callback")
-                failed_callbacks.append(callback)
-        for callback in failed_callbacks:
-            try:
-                del(self.callbacks["data_change"][callback])
-            except:
-                pass
+        self._callback_on_event("data_change",data)
 
-        
-        
-        try:
-            diff = float(new_measurement["value"]) - float(old_measurement["value"])
-            log.info("[%s] Difference for %s : %.2f"%(self.device.sid,self.quantity_name,diff))
-        except:
-            pass
-        
         if self.data_change_hook is not None:
             self.data_change_hook(self, new_measurement, old_measurement)
 # ##
 class IPData(Data):
+    """IP address (of the gateway) see :class:`Data` for methods and init"""
     def __init__(self, device, memory_depth = 10):
         Data.__init__(self,"ip", device, memory_depth = memory_depth)
 
 # ##
 class RGBData(Data):
+    """RGB state (of the gateway) see :class:`Data` for methods and init"""
     def __init__(self, device, memory_depth = 10):
         Data.__init__(self,"rgb", device, memory_depth = memory_depth)
+
     def get_vrgb(self,index=0):
+        """get the (v, r, g, b) tupple of the RGBData
+
+            :param index: the index of the data to get with 0 the latest
+            :returns: (v,r,g,b) tupple with v intensity value. All numbers
+                are in the range [0-255]
+        """
         #returns a Value, R, G ,B byte record for measurement at index index (0: last)
         measurement = self.get_measurement(index=index)
         val = int(measurement["raw_value"])
@@ -207,15 +321,25 @@ class RGBData(Data):
         g = (val >> 8) & 0xff
         b = val & 0xff
         return(l,r,g,b)
+
     def get_measurement(self,index=0):
+        """ get the measurement (see :meth:`Data.get_measurement` with additional
+            fields v, r, g and b
+        """
+
         measurement = Data.get_measurement(self,index=index)
         if measurement is None:
             return None
         l,r,g,b = self.get_vrgb(index=index)
         measurement["rgb"] = dict(L=l, R=r, G=g, B=b)
         return measurement
+
 # ##
 class SwitchStatusData(Data):
+    """switch events see :class:`Data` for methods and init
+        
+        this Data type hold string values in ``["click","double_click","long_click_press","long_click_release"]``
+    """
     def __init__(self, device, memory_depth = 10):
         Data.__init__(self,"status", device, memory_depth = memory_depth)
         self.statuses=["click","double_click","long_click_press","long_click_release"]
@@ -227,6 +351,11 @@ class SwitchStatusData(Data):
 
 # ##
 class MotionStatusData(Data):
+    """Motion events see :class:`Data` for methods and init
+        
+        the only value is ``"motion"``
+        See :class:`NoMotionData` for alternate data of the same Device
+    """
     def __init__(self, device, memory_depth = 10):
         Data.__init__(self,"status", device, memory_depth = memory_depth)
         self.statuses=["motion"]
@@ -238,6 +367,10 @@ class MotionStatusData(Data):
 
 # ##
 class MagnetStatusData(Data):
+    """Magnet events see :class:`Data` for methods and init
+    
+        either ``"open"`` or ``"close"``
+    """
     def __init__(self, device, memory_depth = 10):
         Data.__init__(self,"status", device, memory_depth = memory_depth)
         self.statuses=["open","close"]
@@ -249,6 +382,9 @@ class MagnetStatusData(Data):
 
 # ##
 class CubeStatusData(Data):
+    """Cube status data. See :class:`Data` for methods and init
+        values are in the set ``["alert","shake_air","flip90","flip180"]``
+    """
     def __init__(self, device, memory_depth = 10):
         Data.__init__(self,"status", device, memory_depth = memory_depth)
         self.statuses=["alert","shake_air","flip90","flip180"]
@@ -260,9 +396,17 @@ class CubeStatusData(Data):
 
 # ##
 class NumericData(Data):
+    """ A numeric data Holder
+
+        Init parameters are the same as :class:`Data`
+
+        **Events**:
+            - Additionnally to ``data_new`` and ``data_change`` events defined in :class:`Data`, this
+              class also provides a ``data_change_coarse`` event. Subscribers to this event can use the 
+              :meth:`register_callback_with_precision` to subscribe to this event.
+    """
     def __init__(self,quantity_name, device, memory_depth = 10):
-        Data.__init__(self,quantity_name, device, memory_depth = memory_depth)
-        self.callbacks["data_change_coarse"] = {}
+        Data.__init__(self,quantity_name, device, memory_depth = memory_depth, event_list = ["data_new","data_change","data_change_coarse"])
 
         def update_hook(self,measurement):
             measurement["value"] = float(measurement["raw_value"])
@@ -270,68 +414,97 @@ class NumericData(Data):
         self.update_hook = update_hook
 
         def significant_change_hook(self,new_measurement, old_measurement):
-            #import pdb; pdb.set_trace()
             current_value = new_measurement["value"]
-            failed_callbacks = []
-            for callback in self.callbacks["data_change_coarse"]:
+            callbacks = self._get_callbacks_for("data_change_coarse")
+            
+            for callback in callbacks:
+                properties = callbacks[callback]
                 try:
-                    cbvalue = self.callbacks["data_change_coarse"][callback]
-                    old_value = cbvalue["last_value"]
+                    old_value = properties["last_value"]
                     if old_value is None:
                         #There wasn't any previous value: launch callback
-                        data = {"source_device": self.device, "data_obj":self, "event_type": "data_change_coarse", "precision":cbvalue["precision"],"value":new_measurement["value"], "new_measurement": new_measurement, "old_measurement": None}
-                        callback(data)
-                        cbvalue["last_value"] = current_value
-                        cbvalue["last_measurement"] = new_measurement
-                        continue
-                    #There was a previous value : round the old value to the precision and compare it to new value
-                    precision = cbvalue["precision"]
-                    old_value_rounded = round(old_value / precision) * precision
-                    data = {"source_device": self.device, "data_obj":self, "event_type": "data_change_coarse", "precision":precision,"value":new_measurement["value"], "new_measurement": new_measurement, "old_measurement": cbvalue["last_measurement"]}
+                        data = {"source_device": self.device, 
+                                "data_obj":self, 
+                                "precision":cbvalue["precision"],
+                                "value":new_measurement["value"], 
+                                "new_measurement": new_measurement, 
+                                "old_measurement": None}
+                        self._callback_on_event("data_change_coarse",data,specific_callback=callback)
+                        properties["last_value"] = current_value
+                        properties["last_measurement"] = new_measurement
+                    else:
+                        #There was a previous value : round the old value to the precision and compare it to new value
+                        precision = properties["precision"]
+                        old_value_rounded = round(old_value / precision) * precision
 
-                    if (current_value > old_value_rounded + precision) or (current_value < old_value_rounded - precision):
-                        #generate event
-                        cbvalue["last_value"] = current_value
-                        cbvalue["last_measurement"] = new_measurement
-                        callback(data)
+                        if (current_value > old_value_rounded + precision) or (current_value < old_value_rounded - precision):
+                            data = {"source_device": self.device, 
+                                    "data_obj":self, 
+                                    "precision":precision,
+                                    "value":new_measurement["value"], 
+                                    "new_measurement": new_measurement, 
+                                    "old_measurement": properties["last_measurement"]}
+                            #generate event
+                            self._callback_on_event("data_change_coarse",data,specific_callback=callback)
+                            properties["last_value"] = current_value
+                            properties["last_measurement"] = new_measurement
 
                 except Exception as e:
-                    log.error("NumericData: Significant change hook removing offending callback %r: (%r)"%(callback,e))
-                    log.exception("Message:")
-                    failed_callbacks.append(callback)
-                    
-            for callback in failed_callbacks:
-                try:
-                    del(self.callbacks["data_change_coarse"][callback])
-                except:
-                    pass
-        self.data_change_hook = significant_change_hook
+                    log.exception("Malformed callback properties")
+                    raise e
 
-    def register_callback_on_significant_change(self, callback, precision):
-        log.debug("Registering on_change with precision %r"%precision)
+    def register_callback_with_precision(self, callback, precision, private_data=None):
+        """Register to ``data_change_coarse`` event
+
+            :class:`NumericData` adds a ``data_change_coarse`` event to which
+            this function subscribes. Callback functions gets called only when 
+            the change from the previous call is greater than ``precision``.
+            For example, a Subsriber can register a callback function with precision 0.2
+            for 0.2 deg Celsius change in temperature
+
+            :param callback: the callback function of the form `def cbfun(data)`
+            :param precision: a positive float or integer
+            :param private_data: any data that will be added to the `data` dict arg of the 
+                callback function
+
+            :returns: None
+            :raises: ValueError: the precision is not a positive number
+        """
+
+        log.debug("Registering data_change_coarse with precision %r"%precision)
         try:
             precision = float(precision)
             if precision < 0.0:
-                raise
+                raise 
             if precision <= 0.01:
-                self.register_callback(callback,"data_change")
+                #0.01 is the minimum precision
+                self.register_callback(callback,"data_change", private_data = private_data)
         except:
-            raise ValueError("precision must be a positive number")
+            raise ValueError("'precision' field must be a positive value")
 
-        self.callbacks["data_change_coarse"][callback] = { "precision": precision, "last_value": None, "last_measurement": None}
+        self._callbacks["data_change_coarse"][callback] = { "precision": precision, "last_value": None, "last_measurement": None, "private_data": None}
 
 # ###
 class LuxData(NumericData):
+    """Illumination data. See :class:`NumericData` for methods and init
+        Values holds the amount of lux received by the sensor
+    """
     def __init__(self,device,memory_depth = 10):
         NumericData.__init__(self,"lux",device,memory_depth = memory_depth)
 
 # ###
 class IlluminationData(NumericData):
+    """Illumination data (reported by the gateway). See :class:`NumericData` for methods and init
+        Values report the amount of illumination (units unclear) received by the sensor
+    """
     def __init__(self,device,memory_depth = 10):
         NumericData.__init__(self,"illumination",device,memory_depth = memory_depth)
 
 # ###
 class CubeRotateData(NumericData):
+    """Aqara Cube rotation data. See :class:`NumericData` for methods and init
+        the amount of rotation in degrees in a :class:`CubeStatusData` ``rotate`` event
+    """
     def __init__(self,device,memory_depth = 10):
         NumericData.__init__(self,"rotate",device,memory_depth = memory_depth)
         def update_hook(self,measurement):
@@ -342,11 +515,19 @@ class CubeRotateData(NumericData):
 
 # ###
 class NoMotionData(NumericData):
+    """Absence of motion data. See :class:`NumericData` for methods and init
+        the number of seconds since the last motion was detected (only a few 
+        are reported by the sensor (TODO add list)
+    """
     def __init__(self,device,memory_depth = 10):
         NumericData.__init__(self,"no_motion",device,memory_depth = memory_depth)
 
 # ###
 class VoltageData(NumericData):
+    """Voltage data. See :class:`NumericData` for methods and init
+        raw_value holds the sensor battery voltage (as a str) in mV
+        value holds the percentage of battery left as a float
+    """
     def __init__(self,device,memory_depth = 10):
         NumericData.__init__(self,"voltage",device,memory_depth = memory_depth)
         def update_hook(self,measurement):
@@ -358,6 +539,8 @@ class VoltageData(NumericData):
 
 # ###
 class WeatherData(NumericData):
+    """Mother class for weather data. See :class:`NumericData` for methods and init
+    """
     def __init__(self,quantity_name, device, memory_depth = 10):
         NumericData.__init__(self,quantity_name, device, memory_depth = memory_depth)
         def update_hook(self,measurement):
@@ -371,26 +554,37 @@ class TemperatureUnits:
 
 # ####
 class TemperatureData(WeatherData):
+    """Temperature data in celsius. See :class:`NumericData` for methods and init
+    """
     def __init__(self,device, memory_depth = 10,unit = TemperatureUnits.CELSIUS):
         WeatherData.__init__(self,"temperature", device, memory_depth = memory_depth)
     def get_celsius(self,index=0):
+        """ returns the value as Celsius"""
         try:
             return self.get_value(index=index)
         except:
             return None
     def get_farenheit(self,index=0):
+        """ returns the value as Farenheight"""
         try:
             val=self.get_value(index=index)
             return (val * 9.0 / 5.0) + 32.0
         except:
             return None
+
 # ####
 class PressureData(WeatherData):
+    """Pressure data. See :class:`NumericData` for methods and init
+        values are in mBar
+    """
     def __init__(self, device, memory_depth = 10):
         WeatherData.__init__(self,"pressure", device, memory_depth = memory_depth)
 
 # ####
 class HumidityData(WeatherData):
+    """Humiditydata. See :class:`NumericData` for methods and init
+        values are in percent
+    """
     def __init__(self,device, memory_depth = 10):
         WeatherData.__init__(self,"humidity", device, memory_depth = memory_depth)
 
@@ -608,7 +802,7 @@ class AqaraRoot:
             :param event_type: the type of event to register to
 
             available events are: 
-                - ``"device_new"``: a new class:`AqaraDevice` was detected
+                - ``"device_new"``: a new :class:`AqaraDevice` was detected
         """
         if not event_type in self.event_list:
             log.error("AqaraRoot::register_callback: unknwown event type %s"%str(event_type))
