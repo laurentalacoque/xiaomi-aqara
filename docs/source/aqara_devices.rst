@@ -13,6 +13,8 @@ CallbackHandler
 AqaraRoot class
 ---------------
 
+.. inheritance-diagram:: AqaraRoot
+
 .. autoclass:: AqaraRoot
     :members:
     :inherited-members:
