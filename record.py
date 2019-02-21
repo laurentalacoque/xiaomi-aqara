@@ -6,7 +6,7 @@ record_file = "event_recording.log"
 import logging
 log=logging.getLogger(__name__)
 logging.basicConfig(level=logging.DEBUG)
-logging.getLogger("aqara_devices").setLevel(logging.WARNING)
+logging.getLogger("aqara_devices").setLevel(logging.INFO)
 
 import time
 def logit(address,devicetype,data):
@@ -29,31 +29,31 @@ def record():
             except:
                 log.error("Exception, retrying")
 
-def new_temp(data):
+def on_new_temp(data):
     log.info("new_temp [%s/%s]: %.2f"%(data["source_device"].context.get("room",""), data["source_device"].context.get("room",""), data["value"]))
 
-def temperature_change(data):
+def on_temperature_change(data):
     try:
         log.info("temp_change [%s/%s] : %r (was %r)"%(data["source_device"].context.get("room",""), data["source_device"].context.get("room",""), data["value"],data["old_measurement"]["value"]))
     except:
         log.exception("temperature_change")
         pass
 
-def new_capability(data):
+def on_new_capability(data):
     device = data["source_device"]
     capability = data["capability"]
     data_obj   = data["data_obj"]
     log.info("New capability '%s' device [%s/%s] (%s) id:%s"%(capability,device.context.get("room",""),device.context.get("name",""),device.model, device.sid))
     if capability == 'temperature':
-        data_obj.register_callback_with_precision(temperature_change,0.5)
-        data_obj.register_callback(new_temp,"data_change")
+        data_obj.register_callback_with_precision(on_temperature_change,0.1)
+        data_obj.register_callback(on_new_temp,"data_new")
 
-def new_device(data):
+def on_new_device(data):
     try:
         device = data["device_object"]
         
         log.info("New device [%s/%s] (%s) id:%s"%(device.context.get("room",""),device.context.get("name",""),device.model, device.sid))
-        device.register_callback(new_capability,"capability_new")
+        device.register_callback(on_new_capability,"capability_new")
         #print data
     except:
         log.exception("on_new_device")
@@ -61,7 +61,7 @@ def new_device(data):
 def replay(speed=5):
 
     root = AD.AqaraRoot()
-    root.register_callback(new_device,"device_new")
+    root.register_callback(on_new_device,"device_new")
 
     with open(record_file,"r") as logfile:
         lines = logfile.readlines()
