@@ -100,6 +100,7 @@ class CallbackHandler(object):
             
             callback methods should be fault tolerant, they will be ``try/except`` ed, if they generate an exception, their subscription will be canceled
         """    
+        log.debug("registering callback for event '%s'"%event_type)
         if not event_type in self.event_list:
             log.error("register_callback: unknwown event type %s"%str(event_type))
             raise ValueError("Unknown event %s not in event list %r"%(event_type,self.event_list))
