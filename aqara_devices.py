@@ -786,53 +786,25 @@ class AqaraGateway(AqaraController):
         AqaraController.__init__(self,sid,"gateway",capabilities=capabilities)
 
 #################################################################################################################
-class AqaraRoot:
+class AqaraRoot(CallbackHandler):
     """Hub for Aqara devices
 
         :param known_devices_file: (str) name of the file that hold device context. see :class:`KnownDevices`
 
+        **Events**
+        This class supports the registering of events of type ``device_new``. Subscribers will be called back with
+        a single ``dict`` argument : 
+            ``{"source_object": <this AqaraRoot instance>, "device_object": <new AqaraDevice instance>}``
+
         To create devices and capabilities, repeatdly call :meth:`AqaraRoot.handle_packet` with aqara gateway packets
     """
     def __init__(self, known_devices_file = "known_devices.json"):
+        CallbackHandler.__init__(self,event_list=["device_new"])
         self.KD = KnownDevices(known_devices_file = known_devices_file)
         self.dev_by_sid = {}
         self.dev_by_room = {}
         self.dev_by_model = {}
         self.dev_by_capability = {}
-        self.event_list = ["device_new"]
-        self.callbacks = {}
-        for event_type in self.event_list:
-            self.callbacks[event_type] = {}
-
-    def register_callback(self, callback, event_type):
-        """Register a callback to aqara events
-
-            :param callback: your callback function
-            :param event_type: the type of event to register to
-
-            available events are: 
-                - ``"device_new"``: a new :class:`AqaraDevice` was detected
-        """
-        if not event_type in self.event_list:
-            log.error("AqaraRoot::register_callback: unknwown event type %s"%str(event_type))
-            return False
-        else:
-            self.callbacks[event_type][callback] = True
-            return True
-
-    def unregister_callback(self, callback, event_type = "all_events"):
-        if event_type == "all_events":
-            for evtype in self.callbacks.keys():
-                try:
-                    del(self.callbacks[evtype][callback])
-                except:
-                    pass
-        else:
-            try:
-                del(self.callbacks[event_type][callback])
-            except:
-                pass
-            
 
     def __update_device(self,packet):
         """ packet: a dict containing a parsed aqara packet enriched with a context """
@@ -866,7 +838,7 @@ class AqaraRoot:
                         self.dev_by_capability[capability][target_device] = True
                     else:
                         self.dev_by_capability[capability] = {target_device: True}
-                self.onnewdevice(target_device)
+                self._on_new_device(target_device)
                 
         except KeyError:
             log.exception("__update_device: Malformed packet")
@@ -874,13 +846,12 @@ class AqaraRoot:
         #target_device contains the device object
         target_device.update(packet)
         #print(str(target_device))
-    def onnewdevice(self,device):
-        try:
-            for callback in self.callbacks["device_new"]:
-                data = {"source_object": self, "event_type": "device_new", "device_object": device}
-                callback(data)
-        except:
-            log.exception("AqaraRoot:onnewdevice")
+
+    def _on_new_device(self,device):
+        """Callback every subscriber of the event "device_new" """
+        #callback every subscribers
+        data = {"source_object": self, "device_object": device}
+        self._callback_on_event("device_new",data)
             
     def __create_device(self,packet):
         #TODO use packet["model"] to create the right object
@@ -906,6 +877,13 @@ class AqaraRoot:
         return device
 
     def handle_packet(self,data):
+        """Handle a new packet from the Aqara gateway
+
+            :param data: the packet content. This can be either a json string or a decoded dict
+
+            :raises: ValueError: ``data`` parameter is invalid
+        
+        """
         try:
             if isinstance(data,str):
                 data = json.loads(data)
@@ -914,9 +892,8 @@ class AqaraRoot:
                 data["data"] = parsed_data
         except Exception as e:
             log.error("handle_packet: Error handling packet (%r): %r"%(data,e))
-            return False
+            raise ValueError("Invalid data parameter for AqaraRoot.handle_packet")
+
         data["context"] = self.KD.get_context(data)
 
-        #log.debug("New packet %s"%(json.dumps(data,indent=4)))
-        #
         device = self.__update_device(data)
