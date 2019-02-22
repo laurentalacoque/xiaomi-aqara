@@ -249,6 +249,8 @@ class Data(CallbackHandler):
         #Launch onchange
         if (len(self.measurements) >= 2) and ( measurement["raw_value"] != self.measurements[1]["raw_value"]):
             self.on_data_change(measurement,self.measurements[1])
+        elif len(self.measurements) == 1: # first measurement is a change
+            self.on_data_change(measurement,None)
 
     def get_measurement(self, index=0):
         """Get the last _measurement_
@@ -286,11 +288,10 @@ class Data(CallbackHandler):
     def on_data_change(self, new_measurement, old_measurement):
         if old_measurement is None:
             log.debug("%s first value is %r"%(self.quantity_name,new_measurement["raw_value"]))
-            return
+        else:
+            log.debug("[%s] %s changed from %r to %r (%ds)\n"%(self.device.sid,self.quantity_name,new_measurement["raw_value"],old_measurement["raw_value"], int(new_measurement["update_time"] - old_measurement["update_time"])))
 
-        log.debug("[%s] %s changed from %r to %r (%ds)\n"%(self.device.sid,self.quantity_name,new_measurement["raw_value"],old_measurement["raw_value"], int(new_measurement["update_time"] - old_measurement["update_time"])))
         data = {"data_obj":self, "value": new_measurement["value"], "event_type": "data_change", "new_measurement":new_measurement, "old_measurement":old_measurement, "source_device": self.device}
-        
         self._callback_on_event("data_change",data)
 
         if self.data_change_hook is not None:
