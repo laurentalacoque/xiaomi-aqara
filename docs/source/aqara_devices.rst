@@ -43,7 +43,7 @@ AqaraDevice class
 Data classes
 ------------
 
-.. inheritance-diagram:: SwitchStatusData MotionStatusData MagnetStatusData NumericData LuxData IlluminationData CubeRotateData NoMotionData VoltageData WeatherData TemperatureData PressureData HumidityData
+.. inheritance-diagram:: SwitchStatusData MotionStatusData MagnetStatusData CubeStatusData StatusData NumericData LuxData IlluminationData CubeRotateData NoMotionData VoltageData WeatherData TemperatureData PressureData HumidityData
 
 The Data class
 ++++++++++++++
