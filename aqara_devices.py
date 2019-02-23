@@ -408,7 +408,7 @@ class MotionStatusData(StatusData):
         StatusData.__init__(self, device, memory_depth = memory_depth, statuses=["motion"])
 
 # ##
-class MagnetStatusData(Data):
+class MagnetStatusData(StatusData):
     """Magnet events see :class:`Data` for methods and init
     
         either ``"open"`` or ``"close"``
@@ -417,7 +417,7 @@ class MagnetStatusData(Data):
         StatusData.__init__(self, device, memory_depth = memory_depth, statuses=["open","close"])
 
 # ##
-class CubeStatusData(Data):
+class CubeStatusData(StatusData):
     """Cube status data. See :class:`Data` for methods and init
         values are in the set ``["alert","shake_air","flip90","flip180"]``
     """
@@ -819,7 +819,7 @@ class AqaraRoot(CallbackHandler):
         **Events**
         This class supports the registering of events of type ``device_new``. Subscribers will be called back with
         a single ``dict`` argument : 
-            ``{"source_object": <this AqaraRoot instance>, "device_object": <new AqaraDevice instance>}``
+        ``{"source_object": <this AqaraRoot instance>, "device_object": <new AqaraDevice instance>}``
 
         To create devices and capabilities, repeatdly call :meth:`AqaraRoot.handle_packet` with aqara gateway packets
     """
