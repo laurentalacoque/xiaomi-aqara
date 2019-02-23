@@ -28,9 +28,9 @@ class TkAqara:
         self.tree.tag_configure("room",background="black",foreground="white")
         self.tree.tag_configure("device",background="#333",foreground="white")
 
-        self.tree.tag_configure("n3",background="#F00")
-        self.tree.tag_configure("n2",background="green")
-        self.tree.tag_configure("n1",background="blue")
+        self.tree.tag_configure("n3",background="#FF9933")
+        self.tree.tag_configure("n2",background="#FFCC99")
+        self.tree.tag_configure("n1",background="#FCF2E7")
         self.recurrent_job_id = self.tk_root.after(500, self._refresh_tags)
         
         #register callback and launch eventloop
@@ -38,20 +38,16 @@ class TkAqara:
 
     def _refresh_tags(self):
         """refresh tags colors"""
-        for i in range(3):
-            #n3->n2
-            #n2->n1
-            #n1->delete
-            tagname = "n%d"%(3-i)
-            newtagname ="n%d"%(2-i)
-            iids = self.tree.tag_has(tagname)
-            if tagname == "n1":
-                for iid in iids:
-                    self.tree.item(iid,tags=())
-            else:
-                for iid in iids:
-                    self.tree.item(iid,tags=newtagname)
-            self.tree.update()
+        n3iids = self.tree.tag_has('n3')
+        n2iids = self.tree.tag_has('n2')
+        n1iids = self.tree.tag_has('n1')
+
+        for iid in n3iids:
+            self.tree.item(iid,tags='n2')
+        for iid in n2iids:
+            self.tree.item(iid,tags='n1')
+        for iid in n1iids:
+            self.tree.item(iid,tags='')
         #call me again
         self.recurrent_job_id = self.tk_root.after(5000, self._refresh_tags)
         
@@ -120,7 +116,8 @@ class TkAqara:
             name = new_measurement["data_type"]
             sid = device.sid
             fullname = "%s.%s"%(sid,name)
-            self.tree.item(fullname,values=(str(new_measurement["value"])),tags="n3")
+            value = "%s\\ %s"%(str(new_measurement["value"]),new_measurement.get("data_units",""))
+            self.tree.item(fullname,values=(value),tags="n3")
             self.tree.see(fullname)
         except:
             log.exception("_on_data_change")
