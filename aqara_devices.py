@@ -222,8 +222,6 @@ class Data(CallbackHandler):
             raise ValueError("memory depth should be a positive number, %r given"%memory_depth)
 
         self.measurements = []
-        self.update_hook = None #overload to provide a generic update hook
-        self.data_change_hook = None
 
 
 
@@ -243,17 +241,36 @@ class Data(CallbackHandler):
         self.measurements.insert(0,measurement)
         self.measurements = self.measurements[0:self.depth] # pop older values
 
-        if self.update_hook != None:
-            self.update_hook(self,measurement)
+        #call the update hook
+        self._update_hook(measurement)
 
-        #Launch onmeasurement
+        #Launch on_data_new
         self.on_data_new(measurement)
 
-        #Launch onchange
+        #Launch onchange if values differ ...
         if (len(self.measurements) >= 2) and ( measurement["raw_value"] != self.measurements[1]["raw_value"]):
             self.on_data_change(measurement,self.measurements[1])
-        elif len(self.measurements) == 1: # first measurement is a change
+        # ... or if it's the first measurement (it is a change)
+        elif len(self.measurements) == 1: 
             self.on_data_change(measurement,None)
+
+    def _update_hook(self,measurement):
+        """Update hook
+        
+            this is called after Data has created a measurement and before events are launched
+            overide to change the measurement in children classes
+        """
+        pass
+
+    def _data_change_hook(self,new_measurement,old_measurement):
+        """Data change hook
+        
+            this is called after Data has created a measurement and before events are launched
+            overide to change the measurement in children classes
+        """
+        pass
+
+
 
     def get_measurement(self, index=0):
         """Get the last _measurement_
@@ -285,20 +302,33 @@ class Data(CallbackHandler):
 
 
     def on_data_new(self,new_measurement):
+        """Called whenever a new measurement was received
+
+            This calls back every subscriber to ``data_new`` event
+        """
         data = {"data_obj":self, "value": new_measurement["value"], "event_type": "data_new", "measurement":new_measurement, "source_device": self.device}
         self._callback_on_event("data_new",data)
 
     def on_data_change(self, new_measurement, old_measurement):
+        """Called on data change
+        
+            Called whenever a new measurement was received and the measurement is
+            different from the previous one
+
+        """
+
         if old_measurement is None:
             log.debug("%s first value is %r"%(self.quantity_name,new_measurement["raw_value"]))
         else:
             log.debug("[%s] %s changed from %r to %r (%ds)\n"%(self.device.sid,self.quantity_name,new_measurement["raw_value"],old_measurement["raw_value"], int(new_measurement["update_time"] - old_measurement["update_time"])))
 
+
+        #call the _data_change_hook before calling back functions
+        self._data_change_hook(new_measurement, old_measurement)
+
         data = {"data_obj":self, "value": new_measurement["value"], "event_type": "data_change", "new_measurement":new_measurement, "old_measurement":old_measurement, "source_device": self.device}
         self._callback_on_event("data_change",data)
 
-        if self.data_change_hook is not None:
-            self.data_change_hook(self, new_measurement, old_measurement)
 # ##
 class IPData(Data):
     """IP address (of the gateway) see :class:`Data` for methods and init"""
@@ -339,36 +369,43 @@ class RGBData(Data):
         measurement["rgb"] = dict(L=l, R=r, G=g, B=b)
         return measurement
 
+class StatusData(Data):
+    """:class:`Data` with status type, see parentfor methods and init
+
+        :param statuses: a list of statuses strings
+        
+        this Data type can have a values in a set of strings
+        such as ``["click","double_click","long_click_press","long_click_release"]``
+    """
+    def __init__(self, device, memory_depth = 10, statuses = []):
+        Data.__init__(self,"status", device, memory_depth = memory_depth)
+        self.statuses=statuses
+
+    def _update_hook(self,measurement):
+        if measurement["raw_value"] not in self.statuses:
+            self.statuses.append(measurement["raw_value"])
+            log.warning("unknown status '%s'"%(measurement["raw_value"]))
+
 # ##
-class SwitchStatusData(Data):
+class SwitchStatusData(StatusData):
     """switch events see :class:`Data` for methods and init
         
         this Data type hold string values in ``["click","double_click","long_click_press","long_click_release"]``
     """
     def __init__(self, device, memory_depth = 10):
-        Data.__init__(self,"status", device, memory_depth = memory_depth)
-        self.statuses=["click","double_click","long_click_press","long_click_release"]
-        def update_hook(self,measurement):
-            if measurement["raw_value"] not in self.statuses:
-                self.statuses.append(measurement["raw_value"])
-                log.warning("adding unknown status '%s'"%(measurement["raw_value"]))
-        self.update_hook = update_hook
+        StatusData.__init__(self, device, 
+                memory_depth = memory_depth,
+                statuses=["click","double_click","long_click_press","long_click_release"])
 
 # ##
-class MotionStatusData(Data):
+class MotionStatusData(StatusData):
     """Motion events see :class:`Data` for methods and init
         
         the only value is ``"motion"``
         See :class:`NoMotionData` for alternate data of the same Device
     """
     def __init__(self, device, memory_depth = 10):
-        Data.__init__(self,"status", device, memory_depth = memory_depth)
-        self.statuses=["motion"]
-        def update_hook(self,measurement):
-            if measurement["raw_value"] not in self.statuses:
-                self.statuses.append(measurement["raw_value"])
-                log.warning("adding unknown status '%s'"%(measurement["raw_value"]))
-        self.update_hook = update_hook
+        StatusData.__init__(self, device, memory_depth = memory_depth, statuses=["motion"])
 
 # ##
 class MagnetStatusData(Data):
@@ -377,13 +414,7 @@ class MagnetStatusData(Data):
         either ``"open"`` or ``"close"``
     """
     def __init__(self, device, memory_depth = 10):
-        Data.__init__(self,"status", device, memory_depth = memory_depth)
-        self.statuses=["open","close"]
-        def update_hook(self,measurement):
-            if measurement["raw_value"] not in self.statuses:
-                self.statuses.append(measurement["raw_value"])
-                log.warning("adding unknown status '%s'"%(measurement["raw_value"]))
-        self.update_hook = update_hook
+        StatusData.__init__(self, device, memory_depth = memory_depth, statuses=["open","close"])
 
 # ##
 class CubeStatusData(Data):
@@ -391,13 +422,8 @@ class CubeStatusData(Data):
         values are in the set ``["alert","shake_air","flip90","flip180"]``
     """
     def __init__(self, device, memory_depth = 10):
-        Data.__init__(self,"status", device, memory_depth = memory_depth)
-        self.statuses=["alert","shake_air","flip90","flip180"]
-        def update_hook(self,measurement):
-            if measurement["raw_value"] not in self.statuses:
-                self.statuses.append(measurement["raw_value"])
-                log.warning("adding unknown status '%s'"%(measurement["raw_value"]))
-        self.update_hook = update_hook
+        StatusData.__init__(self, device, memory_depth = memory_depth,
+                statuses=["alert","shake_air","flip90","flip180"])
 
 # ##
 class NumericData(Data):
@@ -413,50 +439,51 @@ class NumericData(Data):
     def __init__(self,quantity_name, device, units= "", memory_depth = 10):
         Data.__init__(self,quantity_name, device, units=units, memory_depth = memory_depth, event_list = ["data_new","data_change","data_change_coarse"])
 
-        def update_hook(self,measurement):
-            measurement["value"] = float(measurement["raw_value"])
-            log.debug("NumericData update hook %r"%measurement)
-        self.update_hook = update_hook
+    def _update_hook(self,measurement):
+        """overide update hook to change values to float"""
+        measurement["value"] = float(measurement["raw_value"])
+        log.debug("NumericData update hook %r"%measurement)
 
-        def significant_change_hook(self,new_measurement, old_measurement):
-            current_value = new_measurement["value"]
-            callbacks = self._get_callbacks_for("data_change_coarse")
-            
-            for callback in callbacks:
-                properties = callbacks[callback]
-                try:
-                    old_value = properties["last_value"]
-                    if old_value is None:
-                        #There wasn't any previous value: launch callback
+    def _data_change_hook(self,new_measurement, old_measurement):
+        """called on every data changes, callback whenever a change greater than precision occured"""
+        current_value = new_measurement["value"]
+        callbacks = self._get_callbacks_for("data_change_coarse")
+        
+        for callback in callbacks:
+            properties = callbacks[callback]
+            try:
+                old_value = properties["last_value"]
+                if old_value is None:
+                    #There wasn't any previous value: launch callback
+                    data = {"source_device": self.device, 
+                            "data_obj":self, 
+                            "precision":cbvalue["precision"],
+                            "value":new_measurement["value"], 
+                            "new_measurement": new_measurement, 
+                            "old_measurement": None}
+                    self._callback_on_event("data_change_coarse",data,specific_callback=callback)
+                    properties["last_value"] = current_value
+                    properties["last_measurement"] = new_measurement
+                else:
+                    #There was a previous value : round the old value to the precision and compare it to new value
+                    precision = properties["precision"]
+                    old_value_rounded = round(old_value / precision) * precision
+
+                    if (current_value > old_value_rounded + precision) or (current_value < old_value_rounded - precision):
                         data = {"source_device": self.device, 
                                 "data_obj":self, 
-                                "precision":cbvalue["precision"],
+                                "precision":precision,
                                 "value":new_measurement["value"], 
                                 "new_measurement": new_measurement, 
-                                "old_measurement": None}
+                                "old_measurement": properties["last_measurement"]}
+                        #generate event
                         self._callback_on_event("data_change_coarse",data,specific_callback=callback)
                         properties["last_value"] = current_value
                         properties["last_measurement"] = new_measurement
-                    else:
-                        #There was a previous value : round the old value to the precision and compare it to new value
-                        precision = properties["precision"]
-                        old_value_rounded = round(old_value / precision) * precision
 
-                        if (current_value > old_value_rounded + precision) or (current_value < old_value_rounded - precision):
-                            data = {"source_device": self.device, 
-                                    "data_obj":self, 
-                                    "precision":precision,
-                                    "value":new_measurement["value"], 
-                                    "new_measurement": new_measurement, 
-                                    "old_measurement": properties["last_measurement"]}
-                            #generate event
-                            self._callback_on_event("data_change_coarse",data,specific_callback=callback)
-                            properties["last_value"] = current_value
-                            properties["last_measurement"] = new_measurement
-
-                except Exception as e:
-                    log.exception("Malformed callback properties")
-                    raise e
+            except Exception as e:
+                log.exception("Malformed callback properties")
+                raise e
 
     def register_callback_with_precision(self, callback, precision, private_data=None):
         """Register to ``data_change_coarse`` event
@@ -512,10 +539,9 @@ class CubeRotateData(NumericData):
     """
     def __init__(self,device,memory_depth = 10):
         NumericData.__init__(self,"rotate",device,units="deg",memory_depth = memory_depth)
-        def update_hook(self,measurement):
-            measurement["value"] = float(measurement["raw_value"].replace(",","."))
-            log.debug("NumericData update hook %r"%measurement)
-        self.update_hook = update_hook
+    def _update_hook(self,measurement):
+        measurement["value"] = float(measurement["raw_value"].replace(",","."))
+        log.debug("NumericData update hook %r"%measurement)
 
 
 # ###
@@ -535,11 +561,10 @@ class VoltageData(NumericData):
     """
     def __init__(self,device,memory_depth = 10):
         NumericData.__init__(self,"voltage",device,units="%",memory_depth = memory_depth)
-        def update_hook(self,measurement):
-            value = int(measurement["raw_value"])
-            value = 100.0 * ((value - 2700.0) / (3100.0 - 2700.0))
-            measurement["value"] = value
-        self.update_hook = update_hook
+    def _update_hook(self,measurement):
+        value = int(measurement["raw_value"])
+        value = 100.0 * ((value - 2700.0) / (3100.0 - 2700.0))
+        measurement["value"] = value
 
 
 # ###
@@ -548,14 +573,10 @@ class WeatherData(NumericData):
     """
     def __init__(self,quantity_name, device, units="", memory_depth = 10):
         NumericData.__init__(self,quantity_name, device, units, memory_depth = memory_depth)
-        def update_hook(self,measurement):
-            measurement["value"] = float(measurement["raw_value"]) / 100.0
-            log.debug("Saving value %.2f for capability %s"%(measurement["value"],self.quantity_name))
-        self.update_hook = update_hook
+    def _update_hook(self,measurement):
+        measurement["value"] = float(measurement["raw_value"]) / 100.0
+        log.debug("Saving value %.2f for capability %s"%(measurement["value"],self.quantity_name))
 
-class TemperatureUnits:
-    CELSIUS = 0
-    FARENHEIGHT = 1
 
 # ####
 class TemperatureData(WeatherData):
