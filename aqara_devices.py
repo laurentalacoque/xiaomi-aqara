@@ -848,10 +848,10 @@ class AqaraGateway(AqaraController):
     def set_color(self,v,r,g,b):
         """sets the color of the gateway
 
-            :param v: intensity value [0-Z55]
-            :param r: red value [0-Z55]
-            :param g: green value [0-Z55]
-            :param b: blue value [0-Z55]
+            :param v: intensity value [0-255]
+            :param r: red value [0-255]
+            :param g: green value [0-255]
+            :param b: blue value [0-255]
 
             :raises:
                 - :exc:`ConnectionAbortedError`: the gateway ``token`` was not
