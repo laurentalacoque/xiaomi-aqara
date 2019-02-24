@@ -810,21 +810,45 @@ class AqaraController(AqaraSensor): #Every controller reports events, hence inhe
 class AqaraGateway(AqaraController):
     """Gateway device
 
-        see :class:`AqaraSensor` for init arguments
+        see :class:`AqaraSensor` for init arguments and registerable events
+
+        You can interact with the device using the methods below.
+        Before any interaction, you MUST use the :meth:`set_command_handler` to set the gateway password and pass a callback method responsible for actually sending the packet data
 
     """
-    def __init__(self,sid, model, capabilities=["ip","illumination","rgb"], device_password=None):
+    def __init__(self,sid, model, capabilities=["ip","illumination","rgb"]):
         AqaraController.__init__(self,sid,"gateway",capabilities=capabilities)
         self.token = None
-        self.password = device_password
         self.volume = 50
+        self.password = None
+        def raise_me(*args):
+            raise ConnectionRefusedError("No callback was defined to send command")
+        self.send_command_callback = raise_me
+        self.last_ip = None
 
-    def set_password(self,password):
-        """Sets the gateway password
+    def set_command_handler(self,aqara_password, send_command_callback):
+        """Sets the gateway password and command handler callback
             
             :param password: a 16 character string found in the Xiaomi Home app
+            :param callback: a callback function of the form 
+                ``def cb_send(ip: str, port: int, data: str)``. This function is
+                responsible for sending the command to the aqara gateway.
+            
+            :raises: :exp:`ValueError`: the ``aqara_password`` is not a 
+                16 characters string or the ``send_command_callback`` is not a function
         """
-    
+        try:
+            aqara_password = str(aqara_password)
+            assert len(aqara_password) == 16
+        except:
+            raise ValueError("aqara_password should be a 16 chars string")
+        
+        if not callable(send_command_callback):
+            raise ValueError("send_command_callback is not callable") 
+
+        self.password = aqara_password
+        self.send_command_callback = send_command_callback
+
     def update(self,packet):
         """Update the current state of the Device with a new packet
 
@@ -844,6 +868,10 @@ class AqaraGateway(AqaraController):
             self.last_token = packet["token"]
         except KeyError as e:
             log.error("AqaraGateway.update: missing mandatory key:%s"%str(e))
+        try:
+            self.last_ip = packet["data"]["ip"]
+        except:
+            pass
 
     def set_color(self,v,r,g,b):
         """sets the color of the gateway
@@ -857,7 +885,7 @@ class AqaraGateway(AqaraController):
                 - :exc:`ConnectionAbortedError`: the gateway ``token`` was not
                   yet received from the Gateway.
                 - :exc:`ConnectionRefusedError`: the password was not set. Use
-                  :meth:`set_password` to set the Gateway password or 
+                  :meth:`set_command_handler` to set the Gateway password or 
                   pass it as an argument to the constructor
         """
         try:
@@ -880,7 +908,7 @@ class AqaraGateway(AqaraController):
                 - :exc:`ConnectionAbortedError`: the gateway ``token`` was not
                   yet received from the Gateway.
                 - :exc:`ConnectionRefusedError`: the password was not set. Use
-                  :meth:`set_password` to set the Gateway password or 
+                  :meth:`set_command_handler` to set the Gateway password or 
                   pass it as an argument to the constructor
         """
         command={'vol':int(volume)}
@@ -927,7 +955,7 @@ class AqaraGateway(AqaraController):
                 - :exc:`ConnectionAbortedError`: the gateway ``token`` was not
                   yet received from the Gateway.
                 - :exc:`ConnectionRefusedError`: the password was not set. Use
-                  :meth:`set_password` to set the Gateway password or 
+                  :meth:`set_command_handler` to set the Gateway password or 
                   pass it as an argument to the constructor
         """
         if volume is None:
@@ -942,7 +970,7 @@ class AqaraGateway(AqaraController):
                 - :exc:`ConnectionAbortedError`: the gateway ``token`` was not
                   yet received from the Gateway.
                 - :exc:`ConnectionRefusedError`: the password was not set. Use
-                  :meth:`set_password` to set the Gateway password or 
+                  :meth:`set_command_handler` to set the Gateway password or 
                   pass it as an argument to the constructor
         """
         volume=self.volume
@@ -963,7 +991,7 @@ class AqaraGateway(AqaraController):
                 - :exc:`ConnectionAbortedError`: the gateway ``token`` was not
                   yet received from the Gateway.
                 - :exc:`ConnectionRefusedError`: the password was not set. Use
-                  :meth:`set_password` to set the Gateway password or 
+                  :meth:`set_command_handler` to set the Gateway password or 
                   pass it as an argument to the constructor
 
             some code and constants borrowed from 
@@ -995,7 +1023,15 @@ class AqaraGateway(AqaraController):
             "sid":self.sid,
             "short_id":self.short_id,
             "data":command }
+        import json
+        write_command = json.dumps(write_command)
         log.debug("Sending commmand to gateway %s %r"%(self.sid,write_command))
+
+        try:
+            self.send_command_callback(self.last_ip,9898,write_command)
+        except:
+            log.error("Unable to send command to aqara %s:%d")
+            log.exception("Exception:")
 
 #################################################################################################################
 class AqaraRoot(CallbackHandler):
