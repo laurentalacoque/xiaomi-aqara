@@ -4,7 +4,73 @@ import aqara_devices as ad
 import logging
 log = logging.getLogger(__name__)
 
-class TkAqara:
+from tkinter import LabelFrame
+class TkGateway(LabelFrame):
+    """Control for a gateway
+
+        :param aqara_gateway_instance: the AqaraGateway instance
+        :param tk_root: root widget for this control
+
+    """
+
+    def __init__(self, aqara_gateway_instance, tk_root=None):
+        LabelFrame.__init__(self,text="Gateway",padx=5, pady=5)
+
+        self.aqara_gateway_instance = aqara_gateway_instance
+        if tk_root is None:
+            self.tk_root = tk.Tk()
+        else:
+            self.tk_root = tk_root
+
+        #color choose callback function
+        from tkinter import colorchooser
+        def getColor():
+            color = colorchooser.askcolor() 
+            print(color)
+        
+        
+        ttk.Button(self.tk_root,text='Color', command=getColor).pack(side=tk.LEFT)
+        
+        control_variable = tk.StringVar(self.tk_root)
+        sound_options={
+            u"None":10000,
+            u"Sirene 1":0,
+            u"Sirene 2":1,         
+            u"Accident":2,      
+            u"Compte a rebours":3,
+            u"Fantome":4,
+            u"Sniper":5,
+            u"Guerre":6,
+            u"Frappe aérienne":7,
+            u"Aboiements":8,
+            u"Sonnette":10,
+            u"Frappe":11,
+            u"Hilarious":12,
+            u"Sonnerie":13,
+            u"MiMix":20,
+            u"Enthousiastic":21,
+            u"GuitarClassic":22,
+            u"IceWorldPiano":23,
+            u"LeisureTime":24,
+            u"Childhood":25,
+            u"MorningStreamlet":26,
+            u"MusicBox":27,
+            u"Orange":28,
+            u"Thinker ":29,
+        }
+        
+        def play():
+            key = control_variable.get()
+            val = sound_options[key]
+            print ("playing sound %d (%s)"%(val,key))
+        
+        sound_list = sorted(sound_options.keys(), key=lambda kv: sound_options[kv])
+        
+        optionmenu_widget = ttk.OptionMenu(self.tk_root, control_variable, *sound_list).pack(side=tk.LEFT)
+        ttk.Button(self.tk_root,text='play', command=play).pack(side=tk.LEFT)
+
+
+class TkAqara(object):
     """A Tk representation of AqaraRoot
     
         :param known_devices: (str) the known_devices file
@@ -131,6 +197,15 @@ if __name__ == '__main__':
     import time
     logging.basicConfig(level=logging.INFO)
     logging.getLogger('aqara_devices').setLevel(logging.WARNING)
+
+    import sys
+    root=tk.Tk()
+    frame = tk.Frame(root)
+    tkgateway = TkGateway(None,tk_root=frame).pack(fill=tk.X,side=tk.TOP)
+    tkgateway2 = TkGateway(None,tk_root=frame).pack(fill=tk.X,side=tk.BOTTOM)
+    frame.pack()
+    root.mainloop()
+    sys.exit(1)
     tkroot = TkAqara()
 
     def replay():
