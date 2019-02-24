@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import tkinter as tk
 import tkinter.ttk as ttk
 import aqara_devices as ad
