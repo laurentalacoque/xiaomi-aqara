@@ -1,5 +1,5 @@
+# -*- coding: utf-8 -*- 
 """ Aqara device """
-# coding: utf8 
 from __future__ import unicode_literals
 import json
 import logging
@@ -21,7 +21,7 @@ class KnownDevices:
         try:
             with open(self.known_devices_file) as kdf:
                 file_content=kdf.read()
-                #import pdb; pdb.set_trace()
+                #import pdb;pdb.set_trace()
 
                 self.known_devices = json.loads(file_content)
                 log.info("Loaded %d elements from %s"%(len(self.known_devices),self.known_devices_file))
@@ -71,7 +71,7 @@ class KnownDevices:
                 self.__save_known_devices()
             return self.known_devices[sid]
         except KeyError:
-            import pdb; pdb.set_trace()
+            #import pdb ;  pdb.set_trace()
             log.error("get_infos: Invalid packet %r"%data)
             raise
 
@@ -803,12 +803,199 @@ class AqaraCube(AqaraSwitch):
 
 #####################
 class AqaraController(AqaraSensor): #Every controller reports events, hence inheritance to Sensor
+    """AqaraDevice with controller capabilities"""
     def __init__(self,sid,model,capabilities=[]):
         AqaraSensor.__init__(self,sid,model,capabilities=capabilities)
 
 class AqaraGateway(AqaraController):
-    def __init__(self,sid, model, capabilities=["ip","illumination","rgb"]):
+    """Gateway device
+
+        see :class:`AqaraSensor` for init arguments
+
+    """
+    def __init__(self,sid, model, capabilities=["ip","illumination","rgb"], device_password=None):
         AqaraController.__init__(self,sid,"gateway",capabilities=capabilities)
+        self.token = None
+        self.password = device_password
+        self.volume = 50
+
+    def set_password(self,password):
+        """Sets the gateway password
+            
+            :param password: a 16 character string found in the Xiaomi Home app
+        """
+    
+    def update(self,packet):
+        """Update the current state of the Device with a new packet
+
+            :param packet: a dict as transmitted by an Aqara Gateway
+
+            the packet should contain the following properties:
+                - ``short_id``
+                - ``sid``
+                - ``model``
+                - ``cmd``
+                - ``data`` dict of additional data
+                - ``token`` the crypto token for commands
+            
+        """
+        AqaraSensor.update(self,packet)
+        try:
+            self.last_token = packet["token"]
+        except KeyError as e:
+            log.error("AqaraGateway.update: missing mandatory key:%s"%str(e))
+
+    def set_color(self,v,r,g,b):
+        """sets the color of the gateway
+
+            :param v: intensity value [0-Z55]
+            :param r: red value [0-Z55]
+            :param g: green value [0-Z55]
+            :param b: blue value [0-Z55]
+
+            :raises:
+                - ConnectionAbortedError: the gateway ``token`` was not
+                  yet received from the Gateway.
+                - ConnectionRefusedError: the password was not set. Use
+                  :meth:`set_password` to set the Gateway password or 
+                  pass it as an argument to the constructor
+        """
+        try:
+            for val in [v,r,g,b]:
+                val = int(val)
+                assert val >= 0
+                assert val <= 255
+        except:
+            raise ValueError("v,r,g,b arguments must be integer between 0 and 255")
+
+        RGB = "%02x%02x%02x%02x"%(v,r,g,b)
+        command = {'rgb': int(VRGB,16)}
+        self._send_command(command)
+        pass
+
+    def set_volume(self,volume):
+        """sets the volume of the gateway
+
+            :raises:
+                - ConnectionAbortedError: the gateway ``token`` was not
+                  yet received from the Gateway.
+                - ConnectionRefusedError: the password was not set. Use
+                  :meth:`set_password` to set the Gateway password or 
+                  pass it as an argument to the constructor
+        """
+        command={'vol':int(volume)}
+        self.volume = int(volume)
+        pass
+
+    def play_track(self,track_number,volume=None):
+        """play a gateway prerecorded track
+
+            The list of internal tracks is as follows:
+                - 0: Sirène 1
+                - 1: Sirène 2
+                - 2: Accident
+                - 3: Compte à rebours
+                - 4: Fantôme
+                - 5: Sniper
+                - 6: Guerre
+                - 7: Frappe aérienne
+                - 8: Aboiements
+                - 10: Sonnette
+                - 11: Frappe
+                - 12: Hilarious
+                - 13: Sonnerie|
+                - 20: MiMix
+                - 21: Enthousiastic
+                - 22: GuitarClassic
+                - 23: IceWorldPiano
+                - 24: LeisureTime
+                - 25: Childhood
+                - 26: MorningStreamlet
+                - 27: MusicBox
+                - 28: Orange
+                - 29: Thinker 
+
+            Use :meth:`stop_track` to stop
+            
+            :param track_number: the track to play
+            :param volume: (opt,[0-100]) the volume
+                if the volume is not used, last volume
+                set with :meth:`set_volume` will be used
+                defaults to 50
+
+            :raises:
+                - ConnectionAbortedError: the gateway ``token`` was not
+                  yet received from the Gateway.
+                - ConnectionRefusedError: the password was not set. Use
+                  :meth:`set_password` to set the Gateway password or 
+                  pass it as an argument to the constructor
+        """
+        if volume is None:
+            volume=self.volume
+        command={'mid':int(track_number), 'vol': volume}
+        self._send_command(command)
+
+    def stop_track(self):
+        """stops the currently-playing track initiated by :meth:`play_track`
+
+            :raises:
+                - ConnectionAbortedError: the gateway ``token`` was not
+                  yet received from the Gateway.
+                - ConnectionRefusedError: the password was not set. Use
+                  :meth:`set_password` to set the Gateway password or 
+                  pass it as an argument to the constructor
+        """
+        volume=self.volume
+        command={'mid': 10000, 'vol': volume}
+        self._send_command(command)
+
+    def _send_command(self,command):
+        """send a command to the gateway
+            
+            This method computes a secret key based on the gateway
+            password and the last token received and send the command
+            to the gateway
+
+            :param command: a ``dict`` containing the data for the 
+                Xiaomi Aqara ``write`` cmd
+
+            :raises:
+                - ConnectionAbortedError: the gateway ``token`` was not
+                  yet received from the Gateway.
+                - ConnectionRefusedError: the password was not set. Use
+                  :meth:`set_password` to set the Gateway password or 
+                  pass it as an argument to the constructor
+
+            some code and constants borrowed from 
+            https://github.com/Msmith78/jeedom_xiaomihome/
+        """
+
+        if self.token is None:
+            log.error("Unable to send command: no token received from gateway")
+            raise ConnectionAbortedError("Token was not yet received by Gateway, Aborting")
+        
+        if password is None:
+            log.error("Unable to send command: password is not set")
+            raise  ConnectionRefusedError("password was not set yet for Gateway, Aborting")
+
+        from Crypto.Cipher import AES
+        IV_AQUARA = bytearray([0x17, 0x99, 0x6d, 0x09, 
+                               0x3d, 0x28, 0xdd, 0xb3, 
+                               0xba, 0x69, 0x5a, 0x2e,
+                               0x6f, 0x58, 0x56, 0x2e])
+
+        aes = AES.new(password, AES.MODE_CBC, str(IV_AQUARA))
+        #encrypt last token to determine write_key
+        ciphertext = aes.encrypt(self.token)
+        write_key = binascii.hexlify(ciphertext)
+        command['key'] = write_key
+        write_command = {
+            "cmd": u"write",
+            "model": self.model,
+            "sid":self.sid,
+            "short_id":self.short_id,
+            "data":command }
+        log.debug("Sending commmand to gateway %s %r"%(self.sid,write_command))
 
 #################################################################################################################
 class AqaraRoot(CallbackHandler):
