@@ -105,3 +105,11 @@ class AquaraConnector:
             log.exception("Internal server error")
             raise e
 
+    def send_command(self, data, addr = MULTICAST_ADDRESS, port=MULTICAST_PORT):
+        """Send a command to the UDP subject (all related will answer)."""
+        if type(data) is dict:
+            self.socket.sendto(json.dumps(data).encode("utf-8"), (addr, port))
+        else:
+            self.socket.sendto(data.encode("utf-8"), (addr, port))
+                                                            
+
