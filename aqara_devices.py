@@ -831,7 +831,7 @@ class AqaraGateway(AqaraController):
             
             :param password: a 16 character string found in the Xiaomi Home app
             :param callback: a callback function of the form 
-                ``def cb_send(ip: str, port: int, data: str)``. This function is
+                ``def cb_send(data: str, ip: str, port: int)``. This function is
                 responsible for sending the command to the aqara gateway.
             
             :raises: :exp:`ValueError`: the ``aqara_password`` is not a 
