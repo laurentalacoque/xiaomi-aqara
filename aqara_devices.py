@@ -96,7 +96,7 @@ class CallbackHandler(object):
             :param private_data: (obj) any data that will be added to the ``data`` dict argument of the callback function
             :returns: None
 
-            :raises: ValueError : `event_type` is not in the event list
+            :raises: :exc:`ValueError`: `event_type` is not in the event list
             
             callback methods should be fault tolerant, they will be ``try/except`` ed, if they generate an exception, their subscription will be canceled
         """    
@@ -134,7 +134,7 @@ class CallbackHandler(object):
 
             :returns: a ``dict(callback_function -> properties_dict)``
 
-            :raises: ValueError (``event_type`` is not a known event)
+            :raises: :exc:`ValueError` (``event_type`` is not a known event)
 
         """
         try:
@@ -156,7 +156,7 @@ class CallbackHandler(object):
                 to the ``event_type`` will be called with argument ``data``
 
             :returns: None
-            :raises: ValueError (bad event_type), TypeError (``data`` is not of type dict)
+            :raises: :exc:`ValueError` (bad event_type), :exc:`TypeError` (``data`` is not of type dict)
         """
         if event_type not in self._callbacks:
             raise ValueError("Bad event_type %r not in event list %r"%(event_type,self.event_list))
@@ -204,7 +204,7 @@ class Data(CallbackHandler):
         :param units: (str) the units name of this Data values
 
         :returns: None
-        :raises: ValueError (bad memory_depth)
+        :raises: :exc:`ValueError` (bad memory_depth)
 
         **Events**:
             - ``data_new``: called on each :meth:`update` with the value provided
@@ -500,7 +500,7 @@ class NumericData(Data):
                 callback function
 
             :returns: None
-            :raises: ValueError: the precision is not a positive number
+            :raises: :exc:`ValueError`: the precision is not a positive number
         """
 
         log.debug("Registering data_change_coarse with precision %r"%precision)
@@ -854,9 +854,9 @@ class AqaraGateway(AqaraController):
             :param b: blue value [0-Z55]
 
             :raises:
-                - ConnectionAbortedError: the gateway ``token`` was not
+                - :exc:`ConnectionAbortedError`: the gateway ``token`` was not
                   yet received from the Gateway.
-                - ConnectionRefusedError: the password was not set. Use
+                - :exc:`ConnectionRefusedError`: the password was not set. Use
                   :meth:`set_password` to set the Gateway password or 
                   pass it as an argument to the constructor
         """
@@ -877,9 +877,9 @@ class AqaraGateway(AqaraController):
         """sets the volume of the gateway
 
             :raises:
-                - ConnectionAbortedError: the gateway ``token`` was not
+                - :exc:`ConnectionAbortedError`: the gateway ``token`` was not
                   yet received from the Gateway.
-                - ConnectionRefusedError: the password was not set. Use
+                - :exc:`ConnectionRefusedError`: the password was not set. Use
                   :meth:`set_password` to set the Gateway password or 
                   pass it as an argument to the constructor
         """
@@ -924,9 +924,9 @@ class AqaraGateway(AqaraController):
                 defaults to 50
 
             :raises:
-                - ConnectionAbortedError: the gateway ``token`` was not
+                - :exc:`ConnectionAbortedError`: the gateway ``token`` was not
                   yet received from the Gateway.
-                - ConnectionRefusedError: the password was not set. Use
+                - :exc:`ConnectionRefusedError`: the password was not set. Use
                   :meth:`set_password` to set the Gateway password or 
                   pass it as an argument to the constructor
         """
@@ -939,9 +939,9 @@ class AqaraGateway(AqaraController):
         """stops the currently-playing track initiated by :meth:`play_track`
 
             :raises:
-                - ConnectionAbortedError: the gateway ``token`` was not
+                - :exc:`ConnectionAbortedError`: the gateway ``token`` was not
                   yet received from the Gateway.
-                - ConnectionRefusedError: the password was not set. Use
+                - :exc:`ConnectionRefusedError`: the password was not set. Use
                   :meth:`set_password` to set the Gateway password or 
                   pass it as an argument to the constructor
         """
@@ -960,9 +960,9 @@ class AqaraGateway(AqaraController):
                 Xiaomi Aqara ``write`` cmd
 
             :raises:
-                - ConnectionAbortedError: the gateway ``token`` was not
+                - :exc:`ConnectionAbortedError`: the gateway ``token`` was not
                   yet received from the Gateway.
-                - ConnectionRefusedError: the password was not set. Use
+                - :exc:`ConnectionRefusedError`: the password was not set. Use
                   :meth:`set_password` to set the Gateway password or 
                   pass it as an argument to the constructor
 
@@ -1093,7 +1093,7 @@ class AqaraRoot(CallbackHandler):
 
             :param data: the packet content. This can be either a json string or a decoded dict
 
-            :raises: ValueError: ``data`` parameter is invalid
+            :raises: :exc:`ValueError`: ``data`` parameter is invalid
         
         """
         try:
