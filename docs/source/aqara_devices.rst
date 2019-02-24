@@ -40,6 +40,10 @@ AqaraDevice class
     :members:
     :inherited-members:
 
+.. autoclass:: AqaraGateway
+    :members:
+    :inherited-members:
+
 Data classes
 ------------
 
