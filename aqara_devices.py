@@ -834,7 +834,7 @@ class AqaraGateway(AqaraController):
                 ``def cb_send(data: str, ip: str, port: int)``. This function is
                 responsible for sending the command to the aqara gateway.
             
-            :raises: :exp:`ValueError`: the ``aqara_password`` is not a 
+            :raises: :exc:`ValueError`: the ``aqara_password`` is not a
                 16 characters string or the ``send_command_callback`` is not a function
         """
         try:
