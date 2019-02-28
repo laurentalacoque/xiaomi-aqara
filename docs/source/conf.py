@@ -116,7 +116,8 @@ todo_include_todos = True
 
 # The theme to use for HTML and HTML Help pages.  See the documentation for
 # a list of builtin themes.
-html_theme = 'default'
+# html_theme = 'default'
+html_theme = 'sphinx_rtd_theme'
 
 #def setup(app):
     #app.add_stylesheet('custom.css')
