@@ -6,7 +6,7 @@ import logging
 log = logging.getLogger(__name__)
 
 from tkinter import LabelFrame
-class TkGateway(LabelFrame):
+class TkGateway(object):
     """Control for a gateway
 
         :param aqara_gateway_instance: the AqaraGateway instance
@@ -15,7 +15,7 @@ class TkGateway(LabelFrame):
     """
 
     def __init__(self, aqara_gateway_instance, tk_root=None):
-        LabelFrame.__init__(self,text="Gateway",padx=5, pady=5)
+        super(TkGateway,self).__init__()
 
         self.aqara_gateway_instance = aqara_gateway_instance
         if tk_root is None:
@@ -28,11 +28,12 @@ class TkGateway(LabelFrame):
         def getColor():
             color = colorchooser.askcolor() 
             print(color)
+
+        self.frame = LabelFrame(self.tk_root,text="Gateway")
         
+        ttk.Button(self.frame,text='Color', command=getColor).pack(side=tk.LEFT)
         
-        ttk.Button(self.tk_root,text='Color', command=getColor).pack(side=tk.LEFT)
-        
-        control_variable = tk.StringVar(self.tk_root)
+        control_variable = tk.StringVar(self.frame)
         sound_options={
             u"None":10000,
             u"Sirene 1":0,
@@ -67,8 +68,10 @@ class TkGateway(LabelFrame):
         
         sound_list = sorted(sound_options.keys(), key=lambda kv: sound_options[kv])
         
-        optionmenu_widget = ttk.OptionMenu(self.tk_root, control_variable, *sound_list).pack(side=tk.LEFT)
-        ttk.Button(self.tk_root,text='play', command=play).pack(side=tk.LEFT)
+        optionmenu_widget = ttk.OptionMenu(self.frame, control_variable, *sound_list).pack(side=tk.LEFT)
+        ttk.Button(self.frame,text='play', command=play).pack(side=tk.LEFT)
+
+        self.frame.pack()
 
 
 class TkAqara(object):
@@ -99,6 +102,8 @@ class TkAqara(object):
         self.tree.tag_configure("n2",background="#FFCC99")
         self.tree.tag_configure("n1",background="#FCF2E7")
         self.recurrent_job_id = self.tk_root.after(500, self._refresh_tags)
+
+        self.gateways=[]
         
         #register callback and launch eventloop
         self.ad_root.register_callback(self._on_new_device,"device_new")
@@ -151,6 +156,10 @@ class TkAqara(object):
             #register for new capabilities
             device.register_callback(self._on_new_capability,"capability_new")
 
+            if isinstance(device,ad.AqaraGateway):
+                gateway = (device,TkGateway(device,tk_root = self.tk_root))
+                self.gateways.append(gateway)
+
         except:
             log.exception("_on_new_device")
             pass
@@ -202,12 +211,8 @@ if __name__ == '__main__':
     import sys
     root=tk.Tk()
     frame = tk.Frame(root)
-    tkgateway = TkGateway(None,tk_root=frame).pack(fill=tk.X,side=tk.TOP)
-    tkgateway2 = TkGateway(None,tk_root=frame).pack(fill=tk.X,side=tk.BOTTOM)
     frame.pack()
-    root.mainloop()
-    sys.exit(1)
-    tkroot = TkAqara()
+    tkroot = TkAqara(tk_root = frame)
 
     def replay():
         import json
@@ -236,4 +241,4 @@ if __name__ == '__main__':
             tkroot.update(line)
     replaythread = threading.Thread(target=replay,name="read")
     replaythread.start()
-    tkroot.start()
+    root.mainloop()
