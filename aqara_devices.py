@@ -906,7 +906,7 @@ class AqaraGateway(AqaraController):
         except:
             raise ValueError("v,r,g,b arguments must be integer between 0 and 255")
 
-        RGB = "%02x%02x%02x%02x"%(v,r,g,b)
+        VRGB = "%02x%02x%02x%02x"%(v,r,g,b)
         command = {'rgb': int(VRGB,16)}
         self._send_command(command)
         pass
