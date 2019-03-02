@@ -13,7 +13,6 @@ class TkGateway(object):
         :param tk_root: root widget for this control
 
     """
-
     def __init__(self, aqara_gateway_instance, tk_root=None):
         super(TkGateway,self).__init__()
 
@@ -28,6 +27,14 @@ class TkGateway(object):
         def getColor():
             color = colorchooser.askcolor() 
             print(color)
+            r,g,b = color[0]
+            v = (r+b+g)/3
+            v,r,g,b = (int(x) for x in (v,r,g,b))
+            log.warning("Color %d,%d,%d,%d"%(v,r,g,b))
+            try:
+                self.aqara_gateway_instance.set_color(v,r,g,b)
+            except Exception as e:
+                log.warning("error setting RGB: %r"%e)
 
         self.frame = LabelFrame(self.tk_root,text="Gateway")
         
@@ -65,6 +72,10 @@ class TkGateway(object):
             key = control_variable.get()
             val = sound_options[key]
             print ("playing sound %d (%s)"%(val,key))
+            try:
+                self.aqara_gateway_instance.play_track(val)
+            except Exception as e:
+                log.warning("error setting RGB: %r"%e)
         
         sound_list = sorted(sound_options.keys(), key=lambda kv: sound_options[kv])
         
@@ -80,14 +91,31 @@ class TkAqara(object):
         :param known_devices: (str) the known_devices file
         :param tk_root: (obj) the Tk root. If ``None``, a
             new TkRoot will be created
+        :param send_back_function: a callable of the form ``def transmit(msg:str, ip:str, port:int)``
+            that is responsible for transmitting the ``msg`` packet to a remote host.
+            This is used by Controller devices to send actions
+            When set to `None`, nothing happens
     """
-    def __init__(self, known_devices = "known_devices.json", tk_root=None):
+    def __init__(self, known_devices = "known_devices.json", tk_root=None, send_back_function=None):
         self.ad_root = ad.AqaraRoot()
 
         if tk_root is None:
             self.tk_root = tk.Tk()
         else:
             self.tk_root = tk_root
+
+        if send_back_function is None:
+            def default_handler(msg,host,port):
+                log.warning("send_back_function: No handler to send %r to %r:%r"%(msg,host,port))
+                import socket
+                try:
+                    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM) # UDP
+                    sock.sendto(bytes(msg, "utf-8"), (host, port))
+                except:
+                    log.exception("data send failed")
+            self.send_back_function=default_handler
+        else:
+            self.send_back_function = send_back_function
 
         #Create the treeview
         self.tree = ttk.Treeview(self.tk_root, columns = ('value'))
@@ -157,6 +185,9 @@ class TkAqara(object):
             device.register_callback(self._on_new_capability,"capability_new")
 
             if isinstance(device,ad.AqaraGateway):
+                #add the callback function
+                device.set_command_handler(self.send_back_function)
+
                 gateway = (device,TkGateway(device,tk_root = self.tk_root))
                 self.gateways.append(gateway)
 
@@ -205,7 +236,7 @@ if __name__ == '__main__':
     
     import threading
     import time
-    logging.basicConfig(level=logging.INFO)
+    logging.basicConfig(level=logging.WARNING)
     logging.getLogger('aqara_devices').setLevel(logging.WARNING)
 
     import sys
@@ -239,6 +270,35 @@ if __name__ == '__main__':
 
             time.sleep(0.5)
             tkroot.update(line)
-    replaythread = threading.Thread(target=replay,name="read")
-    replaythread.start()
-    root.mainloop()
+            
+
+    def listen():
+        def handle_packet(msg,who):
+            msg = msg.decode("utf-8")
+            #log.warning("new message : %s"%msg)
+            #maybe several packets
+            msgs = msg.split('{"cmd"')
+            for data in msgs[1:]:
+                #log.warning(data)
+                tkroot.update('{"cmd"'+ data)
+        print("Attaching to Aqara Connector")
+        import diffusion_server as ds
+        connector = ds.DiffusionClient(handle_packet,"192.168.0.201")
+        print("Starting listening loop")
+        root.mainloop()
+        with connector:
+            while(True):
+                try:
+                    connector.check_and_raise()
+                except KeyboardInterrupt:
+                    connector.stop()
+                    sys.exit(0)
+                except:
+                    log.error("Exception, retrying")
+    replay_ = False
+    if replay_:
+        replaythread = threading.Thread(target=replay,name="read")
+        replaythread.start()
+        root.mainloop()
+    else:
+        listen()
