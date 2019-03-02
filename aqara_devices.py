@@ -1017,11 +1017,6 @@ class AqaraGateway(AqaraController):
             raise  ConnectionRefusedError("password was not set yet for Gateway, Aborting")
 
         from Crypto.Cipher import AES
-        IV_AQUARA = bytearray([0x17, 0x99, 0x6d, 0x09, 
-                               0x3d, 0x28, 0xdd, 0xb3, 
-                               0xba, 0x69, 0x5a, 0x2e,
-                               0x6f, 0x58, 0x56, 0x2e])
-
         IV_AQUARA = bytes.fromhex("17996d093d28ddb3ba695a2e6f58562e")
         aes = AES.new(self.password, AES.MODE_CBC, (IV_AQUARA))
         #encrypt last token to determine write_key
