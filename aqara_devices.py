@@ -812,30 +812,29 @@ class AqaraGateway(AqaraController):
 
         see :class:`AqaraSensor` for init arguments and registerable events
 
+        :param aqara_password: (str) the device password (or None) see :meth:`set_password`
+
         You can interact with the device using the methods below.
-        Before any interaction, you MUST use the :meth:`set_command_handler` to set the gateway password and pass a callback method responsible for actually sending the packet data
+        Before any interaction, you MUST use the :meth:`set_password` (if not provided during init) and :meth:`set_command_handler` to set the gateway password and pass a callback method responsible for actually sending the packet data
 
     """
-    def __init__(self,sid, model, capabilities=["ip","illumination","rgb"]):
+    def __init__(self,sid, model, capabilities=["ip","illumination","rgb"], aqara_password=None):
         AqaraController.__init__(self,sid,"gateway",capabilities=capabilities)
-        self.token = None
+        self.last_token = None
         self.volume = 50
         self.password = None
+        if aqara_password is not None:
+            self.set_password(aqara_password)
+
         def raise_me(*args):
             raise ConnectionRefusedError("No callback was defined to send command")
         self.send_command_callback = raise_me
         self.last_ip = None
 
-    def set_command_handler(self,aqara_password, send_command_callback):
-        """Sets the gateway password and command handler callback
-            
-            :param password: a 16 character string found in the Xiaomi Home app
-            :param callback: a callback function of the form 
-                ``def cb_send(data: str, ip: str, port: int)``. This function is
-                responsible for sending the command to the aqara gateway.
-            
-            :raises: :exc:`ValueError`: the ``aqara_password`` is not a
-                16 characters string or the ``send_command_callback`` is not a function
+    def set_password(self,aqara_password):
+        """Sets the gateway password
+
+            :param aqara_password: a 16 character string found in the Xiaomi Home app
         """
         try:
             aqara_password = str(aqara_password)
@@ -843,10 +842,20 @@ class AqaraGateway(AqaraController):
         except:
             raise ValueError("aqara_password should be a 16 chars string")
         
+        self.password = aqara_password
+
+    def set_command_handler(self,send_command_callback):
+        """Sets the gateway password and command handler callback
+            
+            :param callback: a callback function of the form 
+                ``def cb_send(data: str, ip: str, port: int)``. This function is
+                responsible for sending the command to the aqara gateway.
+            
+            :raises: :exc:`ValueError`: the ``send_command_callback`` is not a function
+        """
         if not callable(send_command_callback):
             raise ValueError("send_command_callback is not callable") 
 
-        self.password = aqara_password
         self.send_command_callback = send_command_callback
 
     def update(self,packet):
@@ -867,7 +876,8 @@ class AqaraGateway(AqaraController):
         try:
             self.last_token = packet["token"]
         except KeyError as e:
-            log.error("AqaraGateway.update: missing mandatory key:%s"%str(e))
+            pass
+
         try:
             self.last_ip = packet["data"]["ip"]
         except:
@@ -998,11 +1008,11 @@ class AqaraGateway(AqaraController):
             https://github.com/Msmith78/jeedom_xiaomihome/
         """
 
-        if self.token is None:
+        if self.last_token is None:
             log.error("Unable to send command: no token received from gateway")
             raise ConnectionAbortedError("Token was not yet received by Gateway, Aborting")
         
-        if password is None:
+        if self.password is None:
             log.error("Unable to send command: password is not set")
             raise  ConnectionRefusedError("password was not set yet for Gateway, Aborting")
 
@@ -1012,10 +1022,12 @@ class AqaraGateway(AqaraController):
                                0xba, 0x69, 0x5a, 0x2e,
                                0x6f, 0x58, 0x56, 0x2e])
 
-        aes = AES.new(password, AES.MODE_CBC, str(IV_AQUARA))
+        IV_AQUARA = bytes.fromhex("17996d093d28ddb3ba695a2e6f58562e")
+        aes = AES.new(self.password, AES.MODE_CBC, (IV_AQUARA))
         #encrypt last token to determine write_key
-        ciphertext = aes.encrypt(self.token)
-        write_key = binascii.hexlify(ciphertext)
+        ciphertext = aes.encrypt(self.last_token)
+        import binascii
+        write_key = binascii.hexlify(ciphertext).decode("utf-8")
         command['key'] = write_key
         write_command = {
             "cmd": u"write",
@@ -1028,7 +1040,7 @@ class AqaraGateway(AqaraController):
         log.debug("Sending commmand to gateway %s %r"%(self.sid,write_command))
 
         try:
-            self.send_command_callback(self.last_ip,9898,write_command)
+            self.send_command_callback(write_command,self.last_ip,9898)
         except:
             log.error("Unable to send command to aqara %s:%d")
             log.exception("Exception:")
@@ -1109,7 +1121,7 @@ class AqaraRoot(CallbackHandler):
         if (model == "weather.v1") or (model == "weather.v2"):
             device = AqaraWeather(sid,model)
         elif (model == "gateway"):
-            device = AqaraGateway(sid,model)
+            device = AqaraGateway(sid,model,aqara_password=context.get("password"))
         elif (model == "magnet") or (model == "sensor_magnet.aq2"):
             device = AqaraMagnet(sid,model)
         elif (model == "sensor_motion.aq2"):
